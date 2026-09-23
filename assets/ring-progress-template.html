@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+/* ============================================================
+   章节卡「环形进度」定稿探索 —— 环内文字从「壹」换成数字「01」
+   参数：?opt=0..3   网格相位 ?gt=N
+   沿用 v5「高级金」语言：纯黑底 / 可动双层网格 / 暖金渐变衬线字 / 细金线
+
+   换数字后的一个已知坑：数字的墨量远小于汉字，同字号会显轻。
+   上一轮同构图对比实测需要放大到约 1.5 倍 + 提到 700 字重才追得回
+   视觉重量（壹 184px → 01 需 ≈275px）。这里出三档供挑。
+   ============================================================ */
+@font-face{font-family:'SrcSerifSC';font-weight:600;
+  src:url('./fonts/NotoSerifSC-Bold.woff2') format('woff2');}
+@font-face{font-family:'SrcSerifSC';font-weight:700;
+  src:url('./fonts/NotoSerifSC-Bold.woff2') format('woff2');}
+@font-face{font-family:'SrcSerifSC';font-weight:900;
+  src:url('./fonts/NotoSerifSC-Black.woff2') format('woff2');}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#000;
+  font-family:"SrcSerifSC",serif;-webkit-font-smoothing:antialiased;}
+#root{position:relative;width:1080px;height:1920px;overflow:hidden;z-index:1;}
+.wrap{position:absolute;inset:0;overflow:hidden;color:#fff;}
+
+#bg{position:absolute;inset:0;z-index:0;
+  background:#000 url('./bg2.png') center/1080px 1920px no-repeat;}
+#bg .grid{position:absolute;inset:-320px;will-change:transform;
+  background-image:
+    linear-gradient(rgba(255,255,255,.24) 1.4px,transparent 1.4px),
+    linear-gradient(90deg,rgba(255,255,255,.24) 1.4px,transparent 1.4px);
+  background-size:76px 76px;}
+#bg .grid2{position:absolute;inset:-320px;will-change:transform;
+  background-image:
+    linear-gradient(rgba(255,255,255,.085) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.085) 1px,transparent 1px);
+  background-size:38px 38px;}
+#bg .masks{position:absolute;inset:0;
+  background:radial-gradient(132% 86% at 50% 44%,rgba(0,0,0,0) 48%,rgba(0,0,0,.82) 82%,#000 100%);}
+
+.gold{
+  background:linear-gradient(178deg,#FFFDF2 0%,#FFF6CE 26%,#EEDFA0 52%,#D8C078 72%,#C0A85E 100%);
+  -webkit-background-clip:text;background-clip:text;
+  color:transparent;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 5px 16px rgba(0,0,0,.9)) drop-shadow(0 2px 4px rgba(0,0,0,.95));}
+.gold-xl{-webkit-text-stroke:.8px rgba(186,158,86,.62);paint-order:stroke fill;}
+
+.stage{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;}
+.eb{font-size:26px;letter-spacing:12px;color:rgba(226,203,138,.80);}
+.ttl{font-size:64px;font-weight:600;letter-spacing:3px;line-height:1.52;}
+/* 环内大数字：衬线体 + 等宽数字，避免换章时宽度跳动。
+   字距给到 9px —— 衬线数字「0」和「1」字形本身贴合，字距太小
+   会糊成一个块；拉开后才有「编号」的编辑感。 */
+.ringnum{font-weight:900;line-height:1;letter-spacing:9px;
+  font-variant-numeric:lining-nums tabular-nums;
+  text-indent:9px;   /* 补偿字距在末位多出的一格，保持视觉居中 */
+  transform:translateY(-3px);}
+/* 保留标签版：01 亮金、/ 05 退暗，做出层级，避免和环内数字重复感过强 */
+.tag{font-size:26px;letter-spacing:12px;}
+.tag b{font-weight:900;color:rgba(242,224,160,.95);}
+.tag i{font-style:normal;color:rgba(226,203,138,.62);}
+</style>
+</head>
+<body>
+<div id="bg"><div class="grid"></div><div class="grid2"></div><div class="masks"></div></div>
+<div id="root"></div>
+<script>
+const shots=[];
+function mk(build){
+  const w=document.createElement('div'); w.className='wrap';
+  document.getElementById('root').appendChild(w); build(w); shots.push(w);
+}
+const T='别再拿绝对分数<br>和往年对比';
+
+/* 环形进度的共用工厂：环 + 5 节点 + 环内内容 + 环下标签 + 标题 */
+function ring({numSize, cap, keepTag}){
+  const R=198, CX=228, CY=228, C=2*Math.PI*R;
+  let dots='';
+  for(let i=0;i<5;i++){
+    const a=(-90+i*72)*Math.PI/180;
+    const x=CX+R*Math.cos(a), y=CY+R*Math.sin(a);
+    const on=(i===0);
+    dots+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${on?9:7}"
+      fill="${on?'#F2E0A0':'#0A0A0A'}" stroke="rgba(214,190,120,${on?1:.45})"
+      stroke-width="${on?0:2}"/>`;
+  }
+  const st=document.createElement('div'); st.className='stage';
+  st.innerHTML=`
+    <div style="position:relative;width:456px;height:456px;">
+      <svg width="456" height="456" style="transform:rotate(-90deg);">
+        <circle cx="228" cy="228" r="198" fill="none" stroke="rgba(255,255,255,.105)" stroke-width="5"/>
+        <circle cx="228" cy="228" r="198" fill="none" stroke="rgba(216,192,122,.92)" stroke-width="7"
+          stroke-linecap="round" stroke-dasharray="${C.toFixed(0)}" stroke-dashoffset="${(C*0.8).toFixed(0)}"/>
+      </svg>
+      <svg width="456" height="456" style="position:absolute;left:0;top:0;">${dots}</svg>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+        <div class="gold gold-xl ringnum" style="font-size:${numSize}px;">01</div>
+      </div>
+    </div>
+    ${keepTag?`<div class="tag" style="margin-top:${cap}px;"><b>01</b> <i>/ 05</i></div>`:''}
+    <div class="gold ttl" style="margin-top:${keepTag?38:cap}px;text-align:center;">${T}</div>`;
+  return st;
+}
+
+/* ── 0：数字 275px + 保留环下「01 / 05」标签 ───────────────── */
+mk(w=>w.appendChild(ring({numSize:275, cap:48, keepTag:true})));
+/* ── 1：数字 275px + 去掉标签（推荐） ────────────────────────
+   环上 5 个节点已表达「共 5 章 / 走到第 1 章」，再写一遍 01/05
+   是重复信息。去掉后标题上提，版面更干净。 */
+mk(w=>w.appendChild(ring({numSize:275, cap:74, keepTag:false})));
+/* ── 2：数字 250px + 去标签（对照，看小一档够不够） ─────────── */
+mk(w=>w.appendChild(ring({numSize:250, cap:74, keepTag:false})));
+
+const qs=new URLSearchParams(location.search);
+const which=parseInt(qs.get('opt')||'0',10);
+const gt=parseFloat(qs.get('gt')||'0');
+shots.forEach((w,i)=>{ w.style.display=(i===which)?'block':'none'; });
+document.querySelector('.grid').style.transform=`translate3d(${gt}px,${gt*0.72}px,0)`;
+document.querySelector('.grid2').style.transform=`translate3d(${-gt*0.55}px,${-gt*0.4}px,0)`;
+</script>
+</body>
+</html>

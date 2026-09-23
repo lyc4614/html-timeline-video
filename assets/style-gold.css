@@ -1,0 +1,231 @@
+  *{margin:0;padding:0;box-sizing:border-box;}
+
+  /* ============================================================
+     字体：思源宋体，@font-face 直接引工程内文件（本机没装，不做系统安装）
+     高级金风格必须用衬线 —— 金色渐变配雅黑必土，配宋体才是奢牌感。
+     覆盖所有旧字号：700 = Bold，900 = Black。inline 里的 800 会自动取 900。
+     ============================================================ */
+  @font-face{font-family:'SrcSerif';font-weight:700;font-display:block;
+    src:url('./fonts/NotoSerifSC-Bold.woff2') format('woff2');}
+  @font-face{font-family:'SrcSerif';font-weight:900;font-display:block;
+    src:url('./fonts/NotoSerifSC-Black.woff2') format('woff2');}
+
+  html,body{width:1080px;height:1920px;overflow:hidden;background:#000;
+    font-family:"SrcSerif","Source Han Serif SC","Noto Serif SC","SimSun",serif;
+    -webkit-font-smoothing:antialiased;}
+  #root{position:relative;width:1080px;height:1920px;overflow:hidden;z-index:1;}
+
+  .shot{position:absolute;inset:0;display:none;will-change:opacity;}
+
+  /* 内容容器：必须显式给暖白 —— 背景层拆出去后内容不再继承 .dark 的 color */
+  .wrap{position:absolute;inset:0;overflow:hidden;color:#F5F1E8;}
+
+  /* ============================================================
+     背景（对标「高级卡片.mp4」）—— 全局单层
+     实测：底色纯黑、四角 RGB(0,0,0)、顶部网格区 avg 6.3 / max 38（极暗）、
+           孤立亮点数 = 0（参考片没有任何雪点/噪点）
+     底图（纯黑 + 极淡顶部暖光 + 强暗角）已用 Pillow 烘焙成 bg2.png；
+     网格单独两层做律动，四周有暗场收边把网格压回中间。
+     性能：全屏渐变在 headless 无 GPU 下逐帧 CPU 重算会慢 4-5 倍，位图 blit 才够快。
+     ============================================================ */
+  #bg{position:absolute;inset:0;z-index:0;
+    background:#000 url('./bg2.png') center/1080px 1920px no-repeat;}
+  /* 主网格 76px：参考片周期实测约 24px@1080，照抄太密看不出「格子」反而显脏。
+     76px 是刻意的审美取舍，不是抄漏。 */
+  #bg .grid{position:absolute;inset:-320px;will-change:transform;
+    background-image:
+      linear-gradient(rgba(255,255,255,.24) 1.4px,transparent 1.4px),
+      linear-gradient(90deg,rgba(255,255,255,.24) 1.4px,transparent 1.4px);
+    background-size:76px 76px;}
+  /* 细网格 38px：与主网格错位 + 反向平移，形成「瓷砖缝」双层质感 */
+  #bg .grid2{position:absolute;inset:-320px;will-change:transform;
+    background-image:
+      linear-gradient(rgba(255,255,255,.085) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.085) 1px,transparent 1px);
+    background-size:38px 38px;}
+  /* 暗场收边：参考片四角是实打实的 RGB(0,0,0)，网格铺满全屏会廉价 */
+  #bg .masks{position:absolute;inset:0;
+    background:radial-gradient(132% 86% at 50% 44%,rgba(0,0,0,0) 48%,rgba(0,0,0,.82) 82%,#000 100%);}
+
+  /* ---------- 左上章节标签 / 署名 / 右上时间码 ---------- */
+  .chap{position:absolute;left:70px;top:88px;font-size:30px;font-weight:900;letter-spacing:4px;
+    color:#EBD9A4;border-left:3px solid rgba(214,190,120,.62);padding-left:18px;line-height:1.1;}
+  .sign{position:absolute;left:74px;top:148px;font-size:24px;font-weight:700;
+    color:rgba(226,203,138,.42);letter-spacing:3px;}
+  .chapct{position:absolute;right:70px;top:92px;font-size:26px;
+    color:rgba(226,203,138,.52);font-variant-numeric:tabular-nums;}
+
+  .stage{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding-bottom:150px;box-sizing:border-box;}
+
+  /* ---------- 常驻结构层：顶部进度条 + 底部章节轨 ---------- */
+  #pbar{position:absolute;left:0;top:0;width:1080px;height:3px;z-index:998;
+    background:linear-gradient(90deg,#C0A85E,#FFF6CE);
+    transform-origin:left center;transform:scaleX(0);
+    box-shadow:0 0 20px rgba(226,203,138,.6);}
+  #rail{position:absolute;left:0;right:0;bottom:386px;z-index:997;display:flex;
+    justify-content:center;gap:20px;opacity:0;}
+  #rail .ri{display:flex;flex-direction:column;align-items:center;gap:11px;width:118px;}
+  #rail .ri .rn{font-size:30px;font-weight:900;letter-spacing:2px;
+    color:rgba(226,203,138,.24);line-height:1;}
+  #rail .ri .rb{width:118px;height:3px;border-radius:2px;background:rgba(255,255,255,.09);}
+  #rail .ri.on .rn{color:#F2E0A0;}
+  #rail .ri.on .rb{background:linear-gradient(90deg,#C0A85E,#F2E0A0);
+    box-shadow:0 0 18px rgba(226,203,138,.65);}
+
+  /* ============================================================
+     金色渐变字（对标参考视频标题字）
+     参考实测：字面 avg RGB(215,215,170)、高光 (255,255,215)
+     —— 是「暖金近白」的渐变，不是饱和黄。衬线 + 极细描边 + 底部柔光。
+     注意：background-clip:text 下不能用 text-shadow（会在字后透出第二层字），
+     阴影只能用 filter:drop-shadow。
+     ============================================================ */
+  .gold,.hz,.hz-m,.hz-s,.hz-o,.bignum,.vscard .v,.glass .sc,.brandname{
+    background:linear-gradient(178deg,#FFFDF2 0%,#FFF6CE 26%,#EEDFA0 52%,#D8C078 72%,#C0A85E 100%);
+    -webkit-background-clip:text;background-clip:text;
+    color:transparent;-webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 5px 16px rgba(0,0,0,.9)) drop-shadow(0 2px 4px rgba(0,0,0,.95));}
+  .gold-xl,.hz,.hz-m,.vscard .v{-webkit-text-stroke:.8px rgba(186,158,86,.62);paint-order:stroke fill;}
+  /* 橙金：只留给全片两个「反常识反差」记忆点（94.0% / 差 35 分） */
+  .hz-o{-webkit-text-stroke:.9px rgba(214,148,84,.80);paint-order:stroke fill;}
+
+  .bignum{font-size:258px;font-weight:900;line-height:1.1;letter-spacing:0;
+    font-variant-numeric:lining-nums tabular-nums;}
+  .bignum.small{font-size:196px;}
+
+  /* 高亮：更亮的白金渐变，可叠加在 .bignum / .sc 上 */
+  .hl{background:linear-gradient(178deg,#FFFFFF 0%,#FFFBE4 28%,#F5E7B0 58%,#D8C078 100%);
+    -webkit-background-clip:text;background-clip:text;
+    color:transparent;-webkit-text-fill-color:transparent;}
+  .red{color:#DE8B89;}
+  .grn{color:#93D6B4;}
+
+  /* 副标题：金色字 + 字距（原来那版黄绿胶囊太「村」，弃用） */
+  .sublabel{display:inline-block;font-size:40px;font-weight:700;letter-spacing:9px;
+    color:rgba(238,222,164,.95);margin-bottom:34px;
+    text-shadow:0 4px 18px rgba(0,0,0,.85);}
+
+  /* ============================================================
+     卡片：深炭卡面 + 1px 细金线框 + 四角金线花纹 + 内圈金线 + 斜向细纹
+     对标参考实测：卡面 #0A0A0A~#1C1A17、金线 rgba(214,190,120,.58)、四角有金线花纹
+     四角花纹用 8 条 background-image 短线拼出来（4 角 × 横竖各 1），
+     不需要额外 DOM —— 这样 25 个镜头里的卡片不用逐个改 HTML。
+     ============================================================ */
+  .card5,.glass,.kw,.brandcard{
+    position:relative;border-radius:20px;
+    border:1px solid rgba(214,190,120,.58);
+    background-color:#0E0D0C;
+    background-image:
+      linear-gradient(rgba(226,203,138,.72),rgba(226,203,138,.72)),
+      linear-gradient(rgba(226,203,138,.72),rgba(226,203,138,.72)),
+      linear-gradient(rgba(226,203,138,.72),rgba(226,203,138,.72)),
+      linear-gradient(rgba(226,203,138,.72),rgba(226,203,138,.72)),
+      linear-gradient(rgba(226,203,138,.72),rgba(226,203,138,.72)),
+      linear-gradient(rgba(226,203,138,.72),rgba(226,203,138,.72)),
+      linear-gradient(rgba(226,203,138,.72),rgba(226,203,138,.72)),
+      linear-gradient(rgba(226,203,138,.72),rgba(226,203,138,.72)),
+      linear-gradient(150deg,rgba(255,255,255,.055) 0%,rgba(255,255,255,0) 34%),
+      linear-gradient(168deg,#1C1A17 0%,#121110 46%,#0A0A0A 100%);
+    background-size:
+      38px 1.6px,1.6px 38px,
+      38px 1.6px,1.6px 38px,
+      38px 1.6px,1.6px 38px,
+      38px 1.6px,1.6px 38px,
+      100% 100%,100% 100%;
+    background-position:
+      12px 12px,12px 12px,
+      calc(100% - 50px) 12px,calc(100% - 13px) 12px,
+      12px calc(100% - 13px),12px calc(100% - 50px),
+      calc(100% - 50px) calc(100% - 13px),calc(100% - 13px) calc(100% - 50px),
+      0 0,0 0;
+    background-repeat:no-repeat;
+    box-shadow:0 0 0 1px rgba(0,0,0,.9),0 0 34px rgba(214,190,120,.12),
+               0 26px 60px rgba(0,0,0,.80),inset 0 1px 0 rgba(255,236,180,.10);}
+  /* 卡内斜向细纹 */
+  .card5::before,.glass::before,.kw::before,.brandcard::before{
+    content:'';position:absolute;inset:1px;border-radius:19px;pointer-events:none;
+    background:repeating-linear-gradient(118deg,rgba(255,255,255,.028) 0 1px,transparent 1px 13px);}
+  /* 内圈细金线 */
+  .card5::after,.glass::after,.kw::after,.brandcard::after{
+    content:'';position:absolute;inset:9px;border-radius:12px;pointer-events:none;
+    border:1px solid rgba(196,170,102,.20);}
+
+  /* 小胶囊（chips）：单独定义，不用四角花纹 */
+  .tag{font-size:42px;padding:22px 46px;border-radius:999px;font-weight:700;letter-spacing:2px;
+    color:rgba(240,228,196,.95);
+    border:1px solid rgba(214,190,120,.58);
+    background:linear-gradient(168deg,#1C1A17 0%,#0E0D0C 100%);
+    box-shadow:0 0 26px rgba(214,190,120,.10),0 14px 34px rgba(0,0,0,.70);}
+  .tags{display:flex;gap:44px;margin-top:86px;flex-wrap:wrap;justify-content:center;}
+
+  .rowcards{display:flex;gap:46px;justify-content:center;align-items:flex-end;}
+  .glass{width:200px;padding:52px 14px;text-align:center;}
+  .glass .sc{font-size:84px;font-weight:900;font-variant-numeric:lining-nums tabular-nums;line-height:1.1;}
+  .glass .nm{font-size:30px;color:rgba(226,216,190,.62);margin-top:14px;letter-spacing:2px;}
+
+  .rings{display:flex;gap:60px;align-items:center;justify-content:center;}
+  .ringbox{text-align:center;}
+  .ringcap{font-size:40px;color:rgba(226,216,190,.62);margin-top:20px;letter-spacing:2px;}
+  .ringval{font-size:62px;font-weight:900;margin-top:8px;font-variant-numeric:lining-nums tabular-nums;}
+
+  .kwcards{display:flex;gap:34px;justify-content:center;flex-wrap:wrap;max-width:980px;}
+  .kw{width:430px;padding:52px 26px;font-size:52px;font-weight:900;text-align:center;
+    color:#F2E4BE;letter-spacing:3px;}
+  .kw.o{border-color:rgba(232,210,150,.88);color:#FFF0CC;
+    box-shadow:0 0 0 1px rgba(0,0,0,.9),0 0 40px rgba(226,203,138,.18),0 26px 60px rgba(0,0,0,.80);}
+
+  .strike{position:relative;display:inline-block;color:rgba(214,206,186,.42);}
+  .strikeline{position:absolute;left:-10px;right:-10px;top:52%;height:4px;
+    background:linear-gradient(90deg,rgba(192,168,94,.45),#EBD9A4,rgba(192,168,94,.45));
+    box-shadow:0 0 18px rgba(226,203,138,.5);transform-origin:left center;}
+
+  .vscards{display:flex;gap:64px;align-items:center;justify-content:center;}
+  .vscard{text-align:center;}
+  .vscard .k{font-size:40px;color:rgba(226,216,190,.62);margin-bottom:16px;letter-spacing:3px;}
+  .vscard .v{font-size:146px;font-weight:900;font-variant-numeric:lining-nums tabular-nums;line-height:1.06;}
+
+  /* 分差标尺：把「住宿 vs 走读」两个数字用一条带差值胶囊的线连起来。
+     差值胶囊用暗红 —— 全片最强反常识记忆点（参考片的风险色就是这档暗调） */
+  .ruler{position:relative;width:100%;height:104px;margin-top:46px;}
+  .ruler .rl{position:absolute;left:0;right:0;top:50px;height:2px;
+    background:linear-gradient(90deg,rgba(214,190,120,.35),rgba(192,124,120,.9));}
+  .ruler .rt{position:absolute;top:41px;width:2px;height:20px;background:rgba(214,190,120,.5);}
+  .ruler .rt.o{background:#D06E6A;box-shadow:0 0 16px rgba(208,110,106,.9);}
+  .ruler .rd{position:absolute;left:50%;top:2px;transform:translateX(-50%);
+    font-size:58px;font-weight:900;line-height:1;color:#1A0605;
+    background:linear-gradient(178deg,#E8A09C,#C0494A);border-radius:999px;padding:16px 44px;white-space:nowrap;
+    box-shadow:0 0 40px rgba(192,73,74,.5),0 12px 30px rgba(0,0,0,.5);}
+
+  .barchart{display:flex;gap:80px;align-items:flex-end;height:520px;}
+  .barcol{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+  .bar{width:180px;border-radius:14px 14px 0 0;border:2px solid rgba(214,190,120,.42);border-bottom:none;
+    background:linear-gradient(180deg,rgba(214,190,120,.16),rgba(214,190,120,.02));}
+  .bar.o{border-color:rgba(232,210,150,.9);
+    background:linear-gradient(180deg,rgba(232,210,150,.34),rgba(232,210,150,.04));
+    box-shadow:0 0 34px rgba(226,203,138,.26);}
+  .barlbl{font-size:32px;color:rgba(226,216,190,.62);margin-top:18px;text-align:center;
+    max-width:200px;letter-spacing:2px;line-height:1.5;}
+
+  .concl{font-size:52px;font-weight:900;margin-top:70px;color:#F5EBD0;letter-spacing:2px;}
+
+  #sub{position:absolute;left:0;right:0;bottom:150px;z-index:999;text-align:center;padding:0 70px;}
+  #sub span{display:inline-block;background:rgba(0,0,0,.86);color:#F5F1E8;font-size:44px;font-weight:700;
+    line-height:1.5;padding:14px 34px;border-radius:14px;max-width:960px;
+    border:1px solid rgba(214,190,120,.30);
+    box-shadow:0 14px 44px rgba(0,0,0,.70);}
+
+  /* 片尾品牌卡：沿用全片卡片语言，不做白底（白卡会破坏深色统一） */
+  .brandcard{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);
+    width:580px;padding:56px 44px;text-align:center;}
+  .brandname{font-size:64px;font-weight:900;letter-spacing:6px;}
+  .brandsub{font-size:30px;color:rgba(226,216,190,.62);margin-top:16px;letter-spacing:3px;}
+  /* 小程序码占位：刻意不做成「像二维码的随机方块」——那种假码扫不出来，
+     预览版里会误导。这里用明确的虚线占位，提示上线前替换真实小程序码。 */
+  .qrph{margin:34px auto 0;width:300px;height:300px;border-radius:16px;
+    background:rgba(0,0,0,.34);border:1px dashed rgba(214,190,120,.42);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+  .qrph .i{width:78px;height:78px;border-radius:14px;border:5px solid rgba(214,190,120,.45);position:relative;}
+  .qrph .i::after{content:'';position:absolute;inset:15px;background:rgba(214,190,120,.45);border-radius:5px;}
+  .qrph .t1{font-size:32px;font-weight:700;color:rgba(226,203,138,.62);letter-spacing:3px;}
+  .qrph .t2{font-size:22px;color:rgba(214,206,186,.42);letter-spacing:1px;}
+  .qrph-hint{margin-top:22px;font-size:26px;color:rgba(226,216,190,.5);letter-spacing:3px;}

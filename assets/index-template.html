@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>时间轴动效视频模板</title>
+<style>
+  /* ================= 性能铁律 =================
+     1) 背景提升为全局单层 #bg（#root 的兄弟节点），底图（底色+辉光+暗角+星点）
+        已由 assets/gen_bg.py 烘焙成 bg.png —— 实测 0.128s/帧，比放镜头里快一倍
+     2) 内容容器 .wrap 必须显式写 color（背景拆出去后不再继承）
+     3) 不要对 .shot 做整体 scale，不要用 backdrop-filter / 大半径阴影
+     4) 网格逐帧动要用 transform + 周期取模，不要改 background-position
+     详见 SKILL.md「性能规则」                                            */
+  html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#000;
+    font-family:"Microsoft YaHei","PingFang SC",sans-serif;-webkit-font-smoothing:antialiased;}
+  #root{position:relative;width:1080px;height:1920px;overflow:hidden;z-index:1;}
+
+  .shot{position:absolute;inset:0;display:none;will-change:opacity;}
+  .wrap{position:absolute;inset:0;overflow:hidden;color:#fff;}
+
+  /* ============ 全局背景（不在镜头里）============ */
+  #bg{position:absolute;inset:0;z-index:0;
+    background:#000 url('./bg.png') center/1080px 1920px no-repeat;}
+  #bg .grid{position:absolute;inset:-200px;will-change:transform;
+    background-image:
+      linear-gradient(rgba(255,255,255,.130) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.130) 1px,transparent 1px);
+    background-size:38px 38px;}
+
+  .stage{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding-bottom:150px;box-sizing:border-box;}
+
+  /* ================= 花字（白填充 + 亮色描边 + 深色外圈）=================
+     paint-order:stroke fill 是命门：缺了它描边会盖住填充，字糊成一坨。
+     -webkit-text-stroke 是居中描边，视觉宽 ≈ 设定值一半，取值要给到目标 2 倍。 */
+  .hz{color:#fff;-webkit-text-stroke:22px #FAF82B;paint-order:stroke fill;
+    text-shadow:8px 0 0 #07080A,-8px 0 0 #07080A,0 8px 0 #07080A,0 -8px 0 #07080A,
+      6px 6px 0 #07080A,-6px -6px 0 #07080A,6px -6px 0 #07080A,-6px 6px 0 #07080A;}
+  .hz-m{color:#fff;-webkit-text-stroke:14px #FAF82B;paint-order:stroke fill;
+    text-shadow:5px 0 0 #07080A,-5px 0 0 #07080A,0 5px 0 #07080A,0 -5px 0 #07080A,
+      4px 4px 0 #07080A,-4px -4px 0 #07080A,4px -4px 0 #07080A,-4px 4px 0 #07080A;}
+  .hz-s{color:#fff;-webkit-text-stroke:9px #FAF82B;paint-order:stroke fill;
+    text-shadow:3.5px 0 0 #07080A,-3.5px 0 0 #07080A,0 3.5px 0 #07080A,0 -3.5px 0 #07080A,
+      3px 3px 0 #07080A,-3px -3px 0 #07080A,3px -3px 0 #07080A,-3px 3px 0 #07080A;}
+  /* 稀缺亮点色：只给全片 1-2 处最强记忆点，改色用 -webkit-text-stroke-color 覆盖 */
+  .hz-o{color:#fff;-webkit-text-stroke:22px #FF6B2C;paint-order:stroke fill;
+    text-shadow:8px 0 0 #07080A,-8px 0 0 #07080A,0 8px 0 #07080A,0 -8px 0 #07080A,
+      6px 6px 0 #07080A,-6px -6px 0 #07080A,6px -6px 0 #07080A,-6px 6px 0 #07080A;}
+
+  /* 黄绿胶囊小标题 —— 参考视频里最好复制的识别特征 */
+  .pill{display:inline-block;font-size:40px;font-weight:800;color:#14140A;
+    background:#FAF82B;border-radius:999px;padding:15px 44px;
+    letter-spacing:2px;box-shadow:0 10px 30px rgba(250,248,43,.20);}
+
+  .bignum{font-size:258px;font-weight:800;line-height:1.1;letter-spacing:0;
+    font-variant-numeric:tabular-nums;
+    color:#fff;-webkit-text-stroke:22px #FAF82B;paint-order:stroke fill;
+    text-shadow:8px 0 0 #07080A,-8px 0 0 #07080A,0 8px 0 #07080A,0 -8px 0 #07080A,
+      6px 6px 0 #07080A,-6px -6px 0 #07080A,6px -6px 0 #07080A,-6px 6px 0 #07080A;}
+  .hl{color:#FAF82B;}
+
+  /* ================= 双层描边卡片 =================
+     多层 0 0 0 Npx 的 spread-only box-shadow 画同心环，不用嵌套 div。
+     注意环会向外扩张：横向排布的卡片 gap 必须 > 2 × 最外环半径。 */
+  .card{background:#3B3B3B;border:5px solid #12B8C4;border-radius:18px;
+    box-shadow:0 0 0 5px #262626,0 0 0 10px #7E8085,0 18px 46px rgba(0,0,0,.66);}
+  .card.y{border-color:#FAF82B;}
+
+  .chap{position:absolute;left:70px;top:88px;font-size:30px;font-weight:800;letter-spacing:3px;
+    color:#FAF82B;border-left:6px solid #12B8C4;padding-left:18px;}
+  .sign{position:absolute;left:70px;top:146px;font-size:24px;color:rgba(255,255,255,.28);letter-spacing:2px;}
+
+  /* 常驻结构层：顶部进度条 + 底部章节轨（填掉下半区空场，逐帧只改 transform/class） */
+  #pbar{position:absolute;left:0;top:0;width:1080px;height:5px;background:#FAF82B;z-index:998;
+    transform-origin:left center;transform:scaleX(0);box-shadow:0 0 22px rgba(250,248,43,.75);}
+  #rail{position:absolute;left:0;right:0;bottom:386px;z-index:997;display:flex;
+    justify-content:center;gap:20px;opacity:0;}
+  #rail .ri{display:flex;flex-direction:column;align-items:center;gap:11px;width:118px;}
+  #rail .ri .rn{font-size:34px;font-weight:800;color:#4A4E50;line-height:1;}
+  #rail .ri .rb{width:118px;height:5px;border-radius:3px;background:rgba(255,255,255,.11);}
+  #rail .ri.on .rn{color:#FAF82B;}
+  #rail .ri.on .rb{background:#FAF82B;box-shadow:0 0 20px rgba(250,248,43,.85);}
+
+  #sub{position:absolute;left:0;right:0;bottom:150px;z-index:999;text-align:center;padding:0 70px;}
+  #sub span{display:inline-block;background:rgba(0,0,0,.84);color:#fff;font-size:46px;font-weight:600;
+    line-height:1.5;padding:14px 34px;border-radius:16px;max-width:960px;
+    border:1.5px solid rgba(18,184,196,.34);box-shadow:0 14px 44px rgba(0,0,0,.7);}
+</style>
+</head>
+<body>
+<!-- 背景必须是 #root 的兄弟节点，镜头明暗变化才不会连带它重绘 -->
+<div id="bg"><div class="grid"></div></div>
+<div id="root"></div>
+<div id="pbar"></div>
+<div id="rail">
+  <div class="ri"><div class="rn">壹</div><div class="rb"></div></div>
+  <div class="ri"><div class="rn">贰</div><div class="rb"></div></div>
+</div>
+<div id="sub"><span></span></div>
+<script>
+const FPS = 30, DUR = 20;                       // ==== 改这里：总时长（秒）
+const cl  = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const ease  = u => { u = cl(u); return 1 - Math.pow(1 - u, 3); };
+const ease4 = u => { u = cl(u); return 1 - Math.pow(1 - u, 4); };
+const lp = (a, b, u) => a + (b - a) * u;
+
+/* ==== 改这里：逐句字幕 [起, 止, 文本]，总时长 = 最后一句的结束时间 ==== */
+const SUBS = [
+  [0.5, 5.0, "第一句字幕"],
+  [5.0, 12.0, "第二句字幕"],
+  [12.0, 20.0, "第三句字幕"],
+];
+
+const el = (tag, cls) => { const d = document.createElement(tag); if (cls) d.className = cls; return d; };
+
+/* 背景已经是全局层了，这里只返回内容容器。
+   g 是空壳，仅为兼容镜头里可能残留的 d.g.style.transform 调用。 */
+const GRID_STUB = { style: {} };
+function buildDark() { return { w: el('div', 'wrap'), g: GRID_STUB }; }
+const buildLight = buildDark;
+
+const shots = [];
+function add(s, e, node, fn, label) {
+  const root = el('div', 'shot');
+  if (label) {
+    const c = el('div', 'chap'); c.textContent = label; node.w.appendChild(c);
+    const sg = el('div', 'sign'); sg.textContent = '数据来源 · 你的品牌'; node.w.appendChild(sg);
+  }
+  root.appendChild(node.w);
+  document.getElementById('root').appendChild(root);
+  shots.push({ s, e, el: root, fn, w: node.w });
+}
+
+/* ---- 镜头 1：封面（花字标题 + 黄绿胶囊 + 双层描边序号卡） ---- */
+(function () {
+  const d = buildDark(), st = el('div', 'stage');
+  st.innerHTML = `
+    <div style="font-size:34px;font-weight:800;letter-spacing:12px;color:#12B8C4;margin-bottom:64px;">示例主题</div>
+    <div style="font-size:108px;font-weight:800;line-height:1.46;text-align:center;">
+      <div><span class="hz-m">标题第一行</span></div>
+      <div><span class="hz" style="font-size:132px;">第二行</span></div>
+    </div>
+    <div style="display:flex;gap:38px;margin-top:122px;">
+      ${['壹','贰','叁'].map(x => `<div class="card" style="width:112px;height:112px;border-radius:14px;color:#FAF82B;font-size:46px;font-weight:800;display:flex;align-items:center;justify-content:center;opacity:0;">${x}</div>`).join('')}
+    </div>`;
+  d.w.appendChild(st);
+  add(0, 5, { w: d.w }, (root, lt, t) => {
+    st.style.opacity = cl(lt / 0.6);
+  });
+})();
+
+/* ---- 镜头 2：数字跳动 + 双层描边卡片（抽帧验证：动画完成态在 5.0+1.8+余量 ≈ 7.5s） ---- */
+(function () {
+  const d = buildDark(), st = el('div', 'stage');
+  st.innerHTML = `<div class="pill" id="sl">示例指标</div>
+    <div class="bignum" id="n">0</div>
+    <div style="display:flex;gap:46px;margin-top:86px;" id="cards">
+      <div class="card" style="width:200px;padding:52px 14px;text-align:center;opacity:0;">
+        <div style="font-size:84px;font-weight:800;color:#FAF82B;">592</div>
+        <div style="font-size:32px;color:#A8AEB2;margin-top:12px;">示例</div></div>
+      <div class="card" style="width:200px;padding:52px 14px;text-align:center;opacity:0;">
+        <div style="font-size:84px;font-weight:800;">586</div>
+        <div style="font-size:32px;color:#A8AEB2;margin-top:12px;">示例</div></div>
+    </div>`;
+  d.w.appendChild(st);
+  const n = st.querySelector('#n'), cards = st.querySelectorAll('#cards .card');
+  add(5, 12, { w: d.w }, (root, lt, t) => {
+    st.querySelector('#sl').style.opacity = cl(lt / 0.6);
+    n.textContent = Math.round(lp(0, 12345, ease(cl(lt / 1.8)))).toLocaleString('en-US');
+    cards.forEach((c, i) => {
+      const u = cl((lt - 2.2 - i * 0.2) / 0.5); c.style.opacity = u;
+      c.style.transform = `translateY(${(1 - u) * 60}px)`;
+    });
+  }, '第一 · 示例章节');
+})();
+
+/* ---- 镜头 3：收尾 ---- */
+(function () {
+  const d = buildDark(), st = el('div', 'stage');
+  st.innerHTML = `<div class="hz-m" style="font-size:76px;font-weight:800;text-align:center;">结尾一句话</div>`;
+  d.w.appendChild(st);
+  add(12, 20, { w: d.w }, (root, lt, t) => {
+    st.style.opacity = cl(lt / 0.5);
+  });
+})();
+
+/* ---- 字幕 ---- */
+const subEl = document.querySelector('#sub span');
+let lastSub = null;
+function updateSub(t) {
+  let idx = -1;
+  for (let i = 0; i < SUBS.length; i++) if (t >= SUBS[i][0] && t < SUBS[i][1]) { idx = i; break; }
+  if (idx !== lastSub) {                       // 只在真的变了才碰 DOM
+    lastSub = idx;
+    if (idx < 0) { subEl.style.display = 'none'; }
+    else { subEl.style.display = 'inline-block'; subEl.textContent = SUBS[idx][2]; }
+  }
+}
+
+/* ---- 常驻结构层 ---- */
+const pbarEl = document.getElementById('pbar');
+const railEl = document.getElementById('rail');
+const railItems = railEl.querySelectorAll('.ri');
+const CHAP_SPAN = [[5, 12]];                   // ==== 改这里：各章区间
+let lastChap = -1, lastRailVis = null;
+function updateRail(t) {
+  pbarEl.style.transform = `scaleX(${cl(t / DUR)})`;
+  const vis = t >= CHAP_SPAN[0][0] && t <= CHAP_SPAN[CHAP_SPAN.length - 1][1];
+  if (vis !== lastRailVis) { lastRailVis = vis; railEl.style.opacity = vis ? 1 : 0; }
+  if (!vis) return;
+  let c = 0;
+  for (let i = 0; i < CHAP_SPAN.length; i++) if (t >= CHAP_SPAN[i][0] && t < CHAP_SPAN[i][1]) { c = i; break; }
+  if (c !== lastChap) {
+    lastChap = c;
+    for (let i = 0; i < railItems.length; i++) railItems[i].className = 'ri' + (i === c ? ' on' : '');
+  }
+}
+
+/* ---- 主渲染 ---- */
+const OVER = 0.18;
+const gridEl = document.querySelector('#bg .grid');
+function render(t) {
+  gridEl.style.transform = `translate3d(${(t * 13) % 38}px,${(t * 9) % 38}px,0)`;   // 周期取模
+  for (let i = 0; i < shots.length; i++) {
+    const sh = shots[i];
+    const isLast = i === shots.length - 1;
+    const vis = t >= sh.s && t < sh.e + (isLast ? 0.0001 : OVER);
+    if (!vis) { sh.el.style.display = 'none'; continue; }
+    sh.el.style.display = 'block';
+    sh.el.style.opacity = t <= sh.e ? cl((t - sh.s) / OVER) : 1;
+    sh.el.style.transform = '';                // 不要整体缩放
+    if (sh.fn) sh.fn(sh.el, t - sh.s, t);
+  }
+  updateSub(t);
+  updateRail(t);
+}
+render(0);
+
+/* ---- 契约：渲染脚本依赖这三个全局量，缺一不可 ---- */
+window.__render = render;
+window.__duration = DUR;
+window.__fps = FPS;
+</script>
+</body>
+</html>

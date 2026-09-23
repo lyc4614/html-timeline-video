@@ -1,0 +1,41 @@
+# ---- 渲染产物 ----
+frames/
+frames_*/
+check/
+out_silent.mp4
+*.mp4
+*.mov
+
+# ---- 调试/中间产物 ----
+spread_*.log
+speedtest*.log
+test.mp4
+_neg.html
+_get_rects.cjs
+rects.json
+*_old/
+_trash*/
+_sheet_tmp/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 备份文件（本地回滚用，不入库）----
+index_v*_backup.html
+index_v*_final.html
+*_backup.html
