@@ -4,6 +4,14 @@
 
 适用场景：数据密集的信息图动效、数字跳动、图表生长、章节卡切换、字幕烧录 —— 一切用 CSS 能画出来的动效，且需要**帧精确、可重放、改一版只重跑渲染**。
 
+**画幅：竖屏 9:16（1080×1920）与横版 16:9（1920×1080）都支持**，渲染时切环境变量即可，源码不用改：
+
+```bash
+node render.cjs                              # 竖屏（默认）
+VIDEO_W=1920 VIDEO_H=1080 node render.cjs    # 横版
+```
+卡片尺寸全部由 `--card-w` 一个变量派生，同一套卡片横竖通用 —— 见 `assets/card-library.html`。
+
 ---
 
 ## 为什么是这条路
@@ -19,7 +27,7 @@
 核心思路很朴素：视频本质上就是 `f(t) → 一帧画面`。所以把整支片子写成一个**由时间 `t` 完全驱动的单页 HTML**，剩下的只是循环截图。
 
 ```
-index.html   一个 1080×1920 页面，导出 window.__render(t) / __duration / __fps
+index.html   一个 1080×1920（竖屏）或 1920×1080（横版）页面，导出 window.__render(t) / __duration / __fps
 render.cjs   puppeteer-core 驱动本机 Chrome：for t in 0..DUR: __render(t) → screenshot → frames/f-00000.png
              ffmpeg -framerate 30 -i frames/f-%05d.png → out.mp4
 check.cjs    定点抽帧到 check/，改视觉时先抽帧再全渲
@@ -81,7 +89,7 @@ node render.cjs                       # 全片渲染 + 编码
 ## 目录结构
 
 ```
-SKILL.md                         完整方法论（1066 行）—— 真正的内容在这里
+SKILL.md                         完整方法论 —— 真正的内容在这里
 assets/
   index-template.html            页面骨架（#bg + #root + __render 契约）
   render.cjs                     逐帧截图 + ffmpeg 编码（--test 测速 / --noenc 只截图）
@@ -89,6 +97,7 @@ assets/
   gen_bg.py / gen_bg_clean.py    烘焙背景底图（四层光照：基底+主光+冷调+暗角 → bg.png）
   sample_ref.py                  逆向采样参考视频的真实规格
   style-gold.css                 「高级金」风格 CSS 底座
+  card-library.html              典藏卡片库：横竖两画幅 + 四种卡片形态（含卷草纹/角花 symbol）
   ring-progress-template.html    环形进度章节卡原型
   patch-template.py              批量改造补丁脚本骨架（锚点核对 + 落盘前校验）
   bump_text_contrast.py          全片文字对比度批量提亮
@@ -182,6 +191,24 @@ assets/
 **⑩ 改卡片强度，要把「全部卡片类」列一遍**
 别只改"有颜色的那些"。无彩中性卡、胶囊 tag、排行条、品牌卡漏掉一个，
 就会出现"改了还是分不开"的观感 —— 客户会直接说「很多卡片还是区分不开」。
+
+**⑪ 深黑卡面还有第二条脱离背景的路线：让它「发光」**
+第 ①b 条的「四件套」是**抬亮卡面**。当背景本身很暗（近黑 + 纹理）时，
+让卡面保持深黑、改用「卡外柔光晕 + 双层描边（外金线 + 内缩 3.8% 再一圈淡金线）+
+右下偏移的实心 box-shadow 厚度 + 卡面上中部径向提亮」同样能浮起来，暗场里更高级。
+> 厚度**不要用负 z-index 的 `::after`** —— 它会绘制在所有无 z-index 的绝对定位背景层
+> **之下**，被背景整个盖住。用元素自身的实心 `box-shadow`（列表靠前的绘制在上）。
+
+**⑫ 横版 ≠ 把竖版放大**
+横屏纵向只有 1080px，**单卡高度上限约画幅的 62%**；照搬竖屏版式会让上下大片空白。
+正确解法是**把内容横向摊开**（2–4 列 / 1 大 2 小扇开 / 左图右文）。
+换画幅时只改 `:root` 的 `--W/--H` 与 `--card-w`，卡片内部尺寸全部派生、不必动。
+
+**⑬ `<use href="#symbol">` 必须显式写 height**
+饰纹抽成 `<symbol>` 复用是对的，但外层 `<svg>` 没有自己的 viewBox 时，
+`height:auto` **不会**按宽高比算，而是退回 SVG 默认的 150px ——
+花纹会被纵向拉长成「飘带 / 翅膀」，而肉眼只会觉得「花纹画得不像」。
+自查：本该是正方形的元素量 `getBoundingClientRect()`，宽高不是 1:1 就中招了。
 
 ---
 

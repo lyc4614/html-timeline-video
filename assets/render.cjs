@@ -7,9 +7,12 @@
 //   VIDEO_ROOT   工程目录（含 index.html），默认脚本所在目录
 //   CHROME_PATH  浏览器可执行文件，默认自动探测 Chrome → Edge
 //   FFMPEG_PATH  ffmpeg 可执行文件，默认 from PATH
-//   VIDEO_W      画布宽，默认 1080
-//   VIDEO_H      画布高，默认 1920
+//   VIDEO_W      画布宽，默认 1080（竖屏）。横版传 1920
+//   VIDEO_H      画布高，默认 1920（竖屏）。横版传 1080
 //   VIDEO_FPS    帧率，默认 30
+//   VIDEO_CRF    H.264 质量，默认 16（越小越清、文件越大；成片交付常用 18~21）
+//
+// 横版示例（PowerShell）：$env:VIDEO_W=1920; $env:VIDEO_H=1080; node render.cjs
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +23,7 @@ const FRAMES = path.join(ROOT, 'frames');
 const W = +(process.env.VIDEO_W || 1080);
 const H = +(process.env.VIDEO_H || 1920);
 const FPS = +(process.env.VIDEO_FPS || 30);
+const CRF = String(process.env.VIDEO_CRF || 16);
 const TEST = process.argv.includes('--test');
 const NOENC = process.argv.includes('--noenc');
 
@@ -73,8 +77,12 @@ const log = (m) => process.stdout.write(m + '\n');
   const browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: 'new',
+    // 必须给独立 userDataDir：本机 Chrome 若正在运行，共用默认 profile 时
+    // headless 会「启动即退」，报错只有一句空泛的 connect 失败（踩过）。
+    userDataDir: path.join(ROOT, '.chrome-profile'),
     args: ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1',
-           '--disable-lcd-text', '--font-render-hinting=none', '--allow-file-access-from-files']
+           '--disable-lcd-text', '--font-render-hinting=none', '--allow-file-access-from-files',
+           '--disable-gpu', '--disable-dev-shm-usage']
   });
   const page = await browser.newPage();
   await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
@@ -114,7 +122,7 @@ const log = (m) => process.stdout.write(m + '\n');
   log('encoding -> ' + out);
   execFileSync(findFfmpeg(), [
     '-y', '-framerate', String(FPS), '-i', path.join(FRAMES, 'f-%05d.png'),
-    '-c:v', 'libx264', '-crf', '16', '-preset', 'medium', '-pix_fmt', 'yuv420p',
+    '-c:v', 'libx264', '-crf', CRF, '-preset', 'medium', '-pix_fmt', 'yuv420p',
     '-r', String(FPS), '-movflags', '+faststart', out
   ], { stdio: 'inherit' });
   log('DONE ' + out);

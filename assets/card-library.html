@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>卡片库 · 典藏卡（横版 1920×1080 / 竖版 1080×1920）</title>
+<!--
+  ════════════════════════════════════════════════════════════════════
+  卡片库样板 —— 直接打开就能看，四种卡片形态各占一屏：
+    屏1 典藏单卡（卷草 + 双语标题 + 环形进度）
+    屏2 卡片组：1 大 2 小「扇开」（中卡前置，两侧 rotate ±7.5° 下沉）
+    屏3 横排数据卡（矮卡，横向铺开提信息密度）
+    屏4 竖版适配（同一套卡片换画幅，无需改任何卡片代码）
+
+  怎么用到自己项目里：
+    1. 整段复制 <body> 顶部那个「共用 defs」svg（含 #crest / #corner 两个 symbol）
+    2. 复制 .gcard / .dcard / .ggroup 及其子元素那几组 CSS
+    3. 页面里写 <div class="gcard"><div class="gframe"></div>
+       <svg class="gcorn tl"><use href="#corner"/></svg> … <div class="gc-inner">…</div></div>
+    4. 卡片尺寸只改 --w 一个值；标题字数用 style="--n:5" 告诉它几个字
+
+  换画幅：改下面 :root 里的 --W / --H 即可
+    横版 16:9  → --W:1920px; --H:1080px   （渲染时 VIDEO_W=1920 VIDEO_H=1080）
+    竖版 9:16  → --W:1080px; --H:1920px   （渲染时用默认值）
+  卡片是「画幅无关」的：--w 相对画幅取值，同一套卡片横竖都能用。
+  ════════════════════════════════════════════════════════════════════
+-->
+<style>
+/* ============================================================
+   字体
+   ============================================================ */
+@font-face{font-family:"SrcSans";src:url("fonts/NotoSansSC-Black.woff2") format("woff2");font-weight:900;font-display:block;}
+@font-face{font-family:"SrcSans";src:url("fonts/NotoSansSC-Bold.woff2")  format("woff2");font-weight:700;font-display:block;}
+@font-face{font-family:"SrcSerif";src:url("fonts/NotoSerifSC-Black.woff2") format("woff2");font-weight:900;font-display:block;}
+@font-face{font-family:"SrcSerif";src:url("fonts/NotoSerifSC-Bold.woff2")  format("woff2");font-weight:700;font-display:block;}
+
+/* ============================================================
+   画幅：横版 16:9。竖版只改 --W/--H 两个值，
+   卡片用 --w 单参数等比缩放，其余尺寸全部从 --w 派生。
+   ============================================================ */
+:root{
+  --W:1920px; --H:1080px;
+  /* ★★ 卡片总入口：换画幅只改这一个值。
+     横版 1920×1080 → 470px（约占画幅宽 24.5%）
+     竖版 1080×1920 → 560px（约占画幅宽 52%）
+     其余卡片（组里的小卡 / 横排矮卡）都从它派生，不必逐个改。 */
+  --card-w:470px;
+
+  /* 语义色板：红涨青跌（贴国内家长直觉），金色为中性数据色 */
+  --up:#E0504E; --up-t:#FF9A95;
+  --down:#3E9E8A; --down-t:#5FCBB2;
+  --gold:#DCC276; --gold-hi:#FFF3CE; --gold-lo:#C9A85E;
+  --warn:#E39A38; --cool:#8E83D8; --nu:#9A968C;
+
+  /* 典藏金三梯度：描边 / 饰纹 / 外光晕，别全用同一个透明度 */
+  --g-line:rgba(226,203,138,.72);
+  --g-orm :rgba(214,190,120,.88);
+  --g-glow:rgba(206,176,104,.17);
+}
+html,body{width:var(--W);height:var(--H);margin:0;padding:0;overflow:hidden;background:#000;}
+body{font-family:"SrcSans","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;}
+*{box-sizing:border-box;}
+
+/* ============================================================
+   背景：立体菱形鳞片
+   旋转 45° 的方块阵列，每块「左上受光 + 右下暗边」，做凹凸感。
+   比细线网格更有实物感，是参考图质感的主要来源之一。
+   ============================================================ */
+#bgtiles{position:absolute;left:0;top:0;width:var(--W);height:var(--H);}
+#bgshade{position:absolute;left:0;top:0;width:var(--W);height:var(--H);pointer-events:none;
+  background:
+    radial-gradient(56% 60% at 50% 45%, rgba(255,236,196,.065) 0%, rgba(0,0,0,0) 64%),
+    radial-gradient(124% 124% at 50% 40%, rgba(0,0,0,0) 26%, rgba(0,0,0,.78) 100%);}
+
+/* ============================================================
+   ★ 典藏卡 .gcard
+   —— 让「深黑卡面」脱离背景的四件套（参考图的解法）：
+     ① 卡外柔光晕：卡片周围一圈被点亮的空气
+     ② 双层描边  ：外暗圈切边缘 + 外金线 + 内缩第二圈淡金线
+     ③ 硬边厚度  ：::after 偏移出侧壁（金受光面 + 黑阴影面）
+     ④ 卡面内受光：顶部 inscat 高光 + 上中部径向提亮
+   注意这与「抬亮卡面明度」是并列的两条路线：
+   背景越暗，越该走这条（深黑卡反而更高级）。
+   ============================================================ */
+.gcard{
+  --w:var(--card-w, 470px);           /* ★ 尺寸全部由它派生，改 --card-w 即可 */
+  --h:calc(var(--w) * 1.81);
+  width:var(--w); height:var(--h);
+  position:relative; border-radius:calc(var(--w) * .068);
+  background:
+    radial-gradient(74% 44% at 50% 24%, rgba(255,238,200,.055), rgba(0,0,0,0) 72%),
+    linear-gradient(166deg, #1B1914 0%, #111010 44%, #0A0908 100%);
+  border:1px solid var(--g-line);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,.95),                    /* ② 外暗圈 */
+    0 0 52px var(--g-glow),                       /* ① 卡外柔光晕 */
+    0 0 110px rgba(190,160,96,.09),
+    /* ③ 厚度：右下偏移的实心轮廓。
+       外 box-shadow 天然绘制在卡面「之下」，所以不必用负 z-index 的 ::after
+       —— 那会被无 z-index 的绝对定位背景层盖住（踩过）。
+       列表第一层在最上：金边放前面、暗面放后面更大偏移，
+       露出的断面才是「外暗 + 内金」的金属感。 */
+    6px 7px 0 0 rgba(206,178,116,.50),
+    7px 8px 0 0 #0B0A08,
+    12px 14px 0 0 rgba(0,0,0,.90),
+    0 18px 38px rgba(0,0,0,.68),
+    0 38px 86px rgba(0,0,0,.60),
+    inset 0 1px 0 rgba(255,242,206,.24),          /* ④ 顶部受光 */
+    inset 0 -4px 18px rgba(0,0,0,.62);            /* ④ 底部内暗 */
+}
+/* ② 内缩第二圈淡金线 —— 参考图里能看到的那道「内嵌框」 */
+.gcard .gframe{
+  position:absolute; inset:calc(var(--w) * .038);
+  border:1px solid rgba(212,186,116,.34); border-radius:calc(var(--w) * .046);
+  pointer-events:none;
+}
+/* 卡内斜向细纹：比背景密，暗示「这是另一块材质」 */
+.gcard::before{
+  content:''; position:absolute; inset:3px; border-radius:calc(var(--w) * .058);
+  background:repeating-linear-gradient(118deg,
+    rgba(255,255,255,.042) 0 1px, rgba(0,0,0,0) 1px 16px);
+  pointer-events:none;
+}
+.gc-inner{position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; padding:calc(var(--w)*.100) calc(var(--w)*.090) calc(var(--w)*.082);}
+
+/* 顶部中央卷草纹 / 四角花纹（用 <use> 引用共用 symbol）
+   ⚠ 用 <use href="#symbol"> 时，外层 <svg> 没有自己的 viewBox，
+     `height:auto` 会退回 SVG 的默认 150px（不是按宽高比算）——
+     饰纹会被纵向拉长成「飘带/翅膀」。必须显式写 height。
+     32:1 的卷草 → height = width × 46/300。 */
+.gcrest{width:calc(var(--w) * .560); height:calc(var(--w) * .0859); margin-bottom:calc(var(--w) * .046);}
+.gcorn{position:absolute; width:calc(var(--w) * .195); height:calc(var(--w) * .195);}
+.gcorn.tl{left:calc(var(--w)*.040); top:calc(var(--w)*.040);}
+.gcorn.tr{right:calc(var(--w)*.040); top:calc(var(--w)*.040); transform:scaleX(-1);}
+.gcorn.bl{left:calc(var(--w)*.040); bottom:calc(var(--w)*.040); transform:scaleY(-1);}
+.gcorn.br{right:calc(var(--w)*.040); bottom:calc(var(--w)*.040); transform:scale(-1,-1);}
+
+/* 中文金大字（黑体 900 + 暖金近白渐变）
+   ⚠ 两个坑都在这里踩过：
+   ① 必须 nowrap —— 否则 4 字在卡内宽边界处会断成「3+1」两行。
+   ② 字号必须按字数自适应 —— 固定字号在 5/6 字标题上会横向溢出。
+      用法：<div class="gcn" style="--n:4">四字标题</div>
+      字号 = .80w / n，n 字总宽 ≈ .81w，恰好在卡内宽 (.82w) 内。 */
+.gcn{
+  font-family:"SrcSans"; font-weight:900;
+  font-size:calc(var(--w) * .80 / var(--n,4));
+  letter-spacing:calc(var(--w) * .008);
+  line-height:1.16; text-align:center; white-space:nowrap;
+  background-image:linear-gradient(178deg,#FFF8E2 0%,#F2DA98 32%,#C9A85E 70%,#F7E8BC 100%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+}
+/* 英文小字（衬线 + 宽字距，压在中文下方做第二层级） */
+.gen{
+  font-family:"SrcSerif","Times New Roman",serif; font-weight:700;
+  font-size:calc(var(--w) * .062); letter-spacing:.30em; text-indent:.30em;
+  color:rgba(216,210,192,.78); margin-top:calc(var(--w) * .020);
+}
+
+/* 环形进度块：整块在「标题下方 → 底部」之间垂直居中 */
+.gringwrap{margin:auto 0; display:flex; flex-direction:column; align-items:center;}
+.gring{position:relative; width:calc(var(--w) * .600); height:calc(var(--w) * .600);}
+.gring svg{display:block; width:100%; height:100%;}
+.gring .rnum{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-family:"SrcSans"; font-weight:900; font-size:calc(var(--w) * .300);
+  color:#fff; letter-spacing:-.02em; line-height:1;
+  text-shadow:0 3px 22px rgba(255,255,255,.34), 0 0 54px rgba(255,255,255,.14);
+}
+.gclab{
+  margin-top:calc(var(--w) * .046);
+  font-size:calc(var(--w) * .058); letter-spacing:.18em; text-indent:.18em;
+  color:rgba(212,204,182,.86); font-weight:700;
+}
+
+/* 变体 B：大数字卡（不装环，数字自己当主角） */
+.gbigwrap{margin:auto 0; display:flex; flex-direction:column; align-items:center;}
+.gbig{
+  display:flex; align-items:baseline;
+  font-family:"SrcSans"; font-weight:900; font-size:calc(var(--w) * .420);
+  color:#fff; letter-spacing:-.035em; line-height:1;
+  text-shadow:0 4px 30px rgba(255,255,255,.34), 0 0 70px rgba(255,255,255,.16);
+}
+.gbig .u{font-size:.42em; font-weight:900; margin-left:.05em; letter-spacing:0;}
+.gside{
+  margin-top:calc(var(--w) * .085);
+  font-family:"SrcSans"; font-weight:900;
+  font-size:calc(var(--w) * .165); letter-spacing:.08em; text-indent:.08em;
+  background-image:linear-gradient(178deg,#FFF8E2,#F2DA98 38%,#C9A85E 100%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+}
+.gside-en{
+  margin-top:calc(var(--w) * .036);
+  font-family:"SrcSerif",serif; font-weight:700; font-size:calc(var(--w) * .054);
+  letter-spacing:.26em; text-indent:.26em; color:rgba(212,204,182,.70);
+}
+
+/* ============================================================
+   卡片组：1 大 2 小「扇开」
+   中卡前置、两侧各转 ±7.5° 并下沉 —— 横画幅里最有张力的排法。
+   ============================================================ */
+.ggroup{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  display:flex; align-items:center; justify-content:center;}
+.ggroup .gcard{margin:0 calc(var(--w) * -.072);}
+.ggroup .side{--w:calc(var(--card-w, 470px) * .745); z-index:1; transform-origin:50% 90%;}
+.ggroup .side.l{transform:rotate(-7.5deg) translateY(calc(var(--w) * .050));}
+.ggroup .side.r{transform:rotate( 7.5deg) translateY(calc(var(--w) * .050));}
+.ggroup .mid{--w:var(--card-w, 470px); z-index:3;}
+
+/* ============================================================
+   横排数据卡（矮卡）：横向铺开时用来提信息密度
+   ============================================================ */
+.dcard{
+  --w:calc(var(--card-w, 470px) * .723);
+  width:var(--w); height:calc(var(--w) * 1.14);
+  position:relative; border-radius:calc(var(--w) * .075);
+  background:
+    radial-gradient(78% 46% at 50% 22%, rgba(255,238,200,.055), rgba(0,0,0,0) 74%),
+    linear-gradient(166deg,#1B1914,#111010 48%,#0A0908);
+  border:1px solid var(--g-line);
+  box-shadow:0 0 0 1px rgba(0,0,0,.95), 0 0 46px var(--g-glow),
+    6px 7px 0 0 rgba(206,178,116,.46), 7px 8px 0 0 #0B0A08, 12px 14px 0 0 rgba(0,0,0,.88),
+    0 16px 34px rgba(0,0,0,.66), 0 32px 74px rgba(0,0,0,.56),
+    inset 0 1px 0 rgba(255,242,206,.22), inset 0 -4px 16px rgba(0,0,0,.58);
+  display:flex; flex-direction:column; align-items:center;
+  padding:calc(var(--w) * .130) calc(var(--w) * .070) calc(var(--w) * .105);
+}
+.dcard .gframe{position:absolute; inset:calc(var(--w)*.034);
+  border:1px solid rgba(212,186,116,.30); border-radius:calc(var(--w)*.050); pointer-events:none;}
+.dcard .dk{font-size:calc(var(--w) * .068); letter-spacing:.08em; color:rgba(212,204,182,.88); font-weight:700;}
+.dcard .dv{margin-top:auto; font-family:"SrcSans"; font-weight:900;
+  font-size:calc(var(--w) * .310); line-height:1; letter-spacing:-.02em;}
+.dcard .dv .u{font-size:.44em; margin-left:.03em;}
+.dcard .dl{margin-top:auto; font-size:calc(var(--w) * .062); letter-spacing:.10em; color:rgba(206,198,176,.78); font-weight:700;}
+
+/* ============================================================
+   版式元件：章节 chip / 底部章节轨（横版安全区）
+   ============================================================ */
+#chip{position:absolute; left:96px; top:62px; display:flex; align-items:center; gap:18px;}
+#chip .bar{width:6px; height:52px; border-radius:3px;
+  background:linear-gradient(180deg,#F0D894,#C9A85E); box-shadow:0 0 22px rgba(226,203,138,.45);}
+#chip .tx{font-size:44px; font-weight:900; color:#F3E8C8; letter-spacing:.05em;}
+#rail{position:absolute; left:50%; transform:translateX(-50%); bottom:76px;
+  display:flex; align-items:center; gap:20px;}
+#rail .seg{width:56px; height:3px; border-radius:2px; background:rgba(214,190,120,.22);}
+#rail .seg.on{background:linear-gradient(90deg,#F0D894,#C9A85E); box-shadow:0 0 16px rgba(226,203,138,.55);}
+
+section{position:absolute; inset:0; display:none;}
+section.on{display:block;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     共用 defs：金色渐变 + 两个饰纹 symbol
+     饰纹只写一次，全片用 <use href="#crest"> / <use href="#corner"> 复用
+     ══════════════════════════════════════════════════════════ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="goldG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#FFF8E2"/>
+      <stop offset=".36" stop-color="#F2DA98"/>
+      <stop offset=".72" stop-color="#C9A85E"/>
+      <stop offset="1"   stop-color="#F7E8BC"/>
+    </linearGradient>
+    <linearGradient id="tileG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"   stop-color="#2B2720"/>
+      <stop offset=".48" stop-color="#141312"/>
+      <stop offset="1"   stop-color="#070706"/>
+    </linearGradient>
+    <pattern id="tileP" width="54" height="54" patternUnits="userSpaceOnUse"
+             patternTransform="rotate(45)">
+      <rect width="54" height="54" fill="#0B0A09"/>
+      <rect x="1.2" y="1.2" width="51.6" height="51.6" fill="url(#tileG)"/>
+      <rect x="1.2" y="1.2"  width="51.6" height="1.5" fill="rgba(255,248,228,.095)"/>
+      <rect x="1.2" y="1.2"  width="1.5"  height="51.6" fill="rgba(255,248,228,.070)"/>
+      <rect x="1.2" y="51.3" width="51.6" height="1.5" fill="rgba(0,0,0,.92)"/>
+      <rect x="51.3" y="1.2" width="1.5"  height="51.6" fill="rgba(0,0,0,.92)"/>
+    </pattern>
+
+    <!-- 顶部中央卷草：花蕾 + 两侧小翻卷 + 左右长卷须（末端涡卷）+ 端点 -->
+    <symbol id="crest" viewBox="0 0 300 46">
+      <g fill="none" stroke="url(#goldG)" stroke-linecap="round">
+        <path d="M138 31 C121 35 100 34 86 27 C74 21 61 17 51 20 C41 23 39 33 47 37 C55 40 62 33 57 27 C53 22 45 23 41 29" stroke-width="2.6"/>
+        <path d="M162 31 C179 35 200 34 214 27 C226 21 239 17 249 20 C259 23 261 33 253 37 C245 40 238 33 243 27 C247 22 255 23 259 29" stroke-width="2.6"/>
+        <path d="M140 30 C134 34 131 40 135 43 C139 45.5 143.5 41 141.5 36.5" stroke-width="2.0"/>
+        <path d="M160 30 C166 34 169 40 165 43 C161 45.5 156.5 41 158.5 36.5" stroke-width="2.0"/>
+      </g>
+      <path d="M150 6 C143.5 14.5 140.5 23 142.5 31 C145 37.5 155 37.5 157.5 31 C159.5 23 156.5 14.5 150 6 Z" fill="url(#goldG)"/>
+      <circle cx="37" cy="30" r="3.0" fill="url(#goldG)"/>
+      <circle cx="263" cy="30" r="3.0" fill="url(#goldG)"/>
+    </symbol>
+
+    <!-- 四角花纹：对称双弧 + 双涡卷 + 角点蕊
+         （左上角形态；其余三角用 scaleX/Y 镜像，无需重复定义）
+         要点：必须是「一团」而不是「一条」—— 单弧看起来像飘带/翅膀。 -->
+    <symbol id="corner" viewBox="0 0 64 64">
+      <g fill="none" stroke="url(#goldG)" stroke-linecap="round">
+        <path d="M7 7 C7 24 14 38 27 46" stroke-width="2.2"/>
+        <path d="M7 7 C24 7 38 14 46 27" stroke-width="2.2"/>
+        <path d="M13.5 13.5 C13.5 25 18.5 35 27 40" stroke-width="1.4" opacity=".60"/>
+        <path d="M13.5 13.5 C25 13.5 35 18.5 40 27" stroke-width="1.4" opacity=".60"/>
+        <path d="M27 46 C33.5 50.5 42 46.5 41 38 C40.2 31.5 32.5 30.5 29.8 35.5 C27.7 39.4 31 43.5 35.2 41.8" stroke-width="1.9"/>
+        <path d="M46 27 C50.5 33.5 46.5 42 38 41 C31.5 40.2 30.5 32.5 35.5 29.8 C39.4 27.7 43.5 31 41.8 35.2" stroke-width="1.9"/>
+      </g>
+      <circle cx="7" cy="7" r="2.6" fill="url(#goldG)"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- 背景 -->
+<svg id="bgtiles" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+  <rect width="1920" height="1080" fill="url(#tileP)"/>
+</svg>
+<div id="bgshade"></div>
+<div id="chip"><div class="bar"></div><div class="tx">今天学习</div></div>
+<div id="rail">
+  <div class="seg on"></div><div class="seg"></div><div class="seg"></div><div class="seg"></div>
+</div>
+
+<!-- ══════════════ 屏 1：典藏单卡（竖长卡居中） ══════════════ -->
+<section id="s1" class="on">
+  <div class="gcard" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);">
+    <div class="gframe"></div>
+    <svg class="gcorn tl"><use href="#corner"/></svg>
+    <svg class="gcorn tr"><use href="#corner"/></svg>
+    <svg class="gcorn bl"><use href="#corner"/></svg>
+    <svg class="gcorn br"><use href="#corner"/></svg>
+    <div class="gc-inner">
+      <svg class="gcrest"><use href="#crest"/></svg>
+      <div class="gcn">视频剪辑</div>
+      <div class="gen">Video Editing</div>
+      <div class="gringwrap">
+        <div class="gring">
+          <svg viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="25"/>
+            <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(62,158,138,.26)" stroke-width="39"/>
+            <circle cx="100" cy="100" r="76" fill="none" stroke="#3E9E8A" stroke-width="25"
+                    stroke-linecap="round" stroke-dasharray="477.5" stroke-dashoffset="198"
+                    transform="rotate(-90 100 100)"/>
+          </svg>
+          <div class="rnum">43</div>
+        </div>
+        <div class="gclab">完成度</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 屏 2：1 大 2 小「扇开」卡片组 ══════════════ -->
+<section id="s2">
+  <div class="ggroup">
+    <div class="gcard side l">
+      <div class="gframe"></div>
+      <div class="gc-inner">
+        <svg class="gcrest"><use href="#crest"/></svg>
+        <div class="gcn">视频剪辑</div>
+        <div class="gen">Video Editing</div>
+        <div class="gringwrap">
+          <div class="gring">
+            <svg viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="25"/>
+              <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(62,158,138,.26)" stroke-width="39"/>
+              <circle cx="100" cy="100" r="76" fill="none" stroke="#3E9E8A" stroke-width="25"
+                      stroke-linecap="round" stroke-dasharray="477.5" stroke-dashoffset="196"
+                      transform="rotate(-90 100 100)"/>
+            </svg>
+            <div class="rnum">59</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="gcard mid">
+      <div class="gframe"></div>
+      <svg class="gcorn tl"><use href="#corner"/></svg>
+      <svg class="gcorn tr"><use href="#corner"/></svg>
+      <svg class="gcorn bl"><use href="#corner"/></svg>
+      <svg class="gcorn br"><use href="#corner"/></svg>
+      <div class="gc-inner">
+        <svg class="gcrest"><use href="#crest"/></svg>
+        <div class="gbigwrap">
+          <div class="gbig">98.9<span class="u">%</span></div>
+          <div class="gside">宠粉率</div>
+          <div class="gside-en">Fan-favorite rate</div>
+        </div>
+      </div>
+    </div>
+    <div class="gcard side r">
+      <div class="gframe"></div>
+      <div class="gc-inner">
+        <svg class="gcrest"><use href="#crest"/></svg>
+        <div class="gcn">视觉设计</div>
+        <div class="gen">Visual Design</div>
+        <div class="gringwrap">
+          <div class="gring">
+            <svg viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="25"/>
+              <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(224,80,78,.26)" stroke-width="39"/>
+              <circle cx="100" cy="100" r="76" fill="none" stroke="#E0504E" stroke-width="25"
+                      stroke-linecap="round" stroke-dasharray="477.5" stroke-dashoffset="280"
+                      transform="rotate(-90 100 100)"/>
+            </svg>
+            <div class="rnum">41</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 屏 3：横排数据卡（4 张矮卡） ══════════════ -->
+<section id="s3">
+  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+              display:flex;gap:56px;align-items:center;">
+    <div class="dcard">
+      <div class="gframe"></div>
+      <div class="dk">线上渠道</div>
+      <div class="dv" style="color:#FF9A95;">24<span class="u">个</span></div>
+      <div class="dl">已完成</div>
+    </div>
+    <div class="dcard">
+      <div class="gframe"></div>
+      <div class="dk">线下渠道</div>
+      <div class="dv" style="color:#5FCBB2;">4<span class="u">个</span></div>
+      <div class="dl">已完成</div>
+    </div>
+    <div class="dcard">
+      <div class="gframe"></div>
+      <div class="dk">基准值</div>
+      <div class="dv" style="color:#F2DA98;">438</div>
+      <div class="dl">上一周期</div>
+    </div>
+    <div class="dcard">
+      <div class="gframe"></div>
+      <div class="dk">差值</div>
+      <div class="dv" style="color:#fff;">20<span class="u">个</span></div>
+      <div class="dl">同比</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 屏 4：竖版适配（同款卡片放进 1080×1920） ══════════════ -->
+<section id="s4">
+  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);">
+    <div class="gcard" style="--w:520px;">
+      <div class="gframe"></div>
+      <svg class="gcorn tl"><use href="#corner"/></svg>
+      <svg class="gcorn tr"><use href="#corner"/></svg>
+      <svg class="gcorn bl"><use href="#corner"/></svg>
+      <svg class="gcorn br"><use href="#corner"/></svg>
+      <div class="gc-inner">
+        <svg class="gcrest"><use href="#crest"/></svg>
+        <div class="gcn">视频剪辑</div>
+        <div class="gen">Video Editing</div>
+        <div class="gringwrap">
+          <div class="gring">
+            <svg viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="25"/>
+              <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(62,158,138,.26)" stroke-width="39"/>
+              <circle cx="100" cy="100" r="76" fill="none" stroke="#3E9E8A" stroke-width="25"
+                      stroke-linecap="round" stroke-dasharray="477.5" stroke-dashoffset="198"
+                      transform="rotate(-90 100 100)"/>
+            </svg>
+            <div class="rnum">43</div>
+          </div>
+          <div class="gclab">完成度</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+window.__show = function(i){
+  document.querySelectorAll('section').forEach((s,k)=>s.classList.toggle('on', k === i-1));
+  document.querySelectorAll('#rail .seg').forEach((s,k)=>s.classList.toggle('on', k === i-1));
+};
+// 换画幅预览：__setCanvas(1080,1920) 切竖版 / __setCanvas(1920,1080) 切横版
+window.__setCanvas = function(w,h){
+  const r = document.documentElement.style;
+  r.setProperty('--W', w + 'px'); r.setProperty('--H', h + 'px');
+};
+</script>
+</body>
+</html>
