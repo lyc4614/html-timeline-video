@@ -60,6 +60,24 @@ for st, et in shots:
 print('取样时刻:', T)
 
 # ---------- 2. 反抽帧 ----------
+# 先卡住「帧序列画幅」这一关：只要有一帧尺寸不对，ffmpeg 编码会按**首帧尺寸**
+# 把全片静默缩放成错误画幅 —— 片子看起来正常，规格却是错的。
+# （真实翻车：局部重渲脚本的默认画幅是竖版，写进横版序列后整片变 1080×1920，
+#   而且 PSNR 从 41 掉到 33 才发现。所以这个守卫必须放在比对之前。）
+bad_size = []
+for fn in sorted(os.listdir(FRAMES)):
+    if not fn.startswith('f-') or not fn.endswith('.png'):
+        continue
+    with Image.open(os.path.join(FRAMES, fn)) as im:
+        if im.size != (W, H):
+            bad_size.append((fn, im.size))
+if bad_size:
+    print('!! 帧序列画幅不一致：%d 帧不是 %dx%d（如 %s %s）'
+          % (len(bad_size), W, H, bad_size[0][0], bad_size[0][1]))
+    print('   先修帧再比对，否则 PSNR 与规格全部不可信。')
+    sys.exit(4)
+print('帧序列画幅一致：全部 %dx%d' % (W, H))
+
 cells = []
 for i, t in enumerate(T, 1):
     p = os.path.join(OUT, 'enc_%02d_%.2f.png' % (i, t))
