@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>3D 图标竖屏方案</title>
+<style>
+  @font-face{font-family:'NS';src:url('fonts/NotoSansSC-Black.woff2') format('woff2');font-weight:900}
+  @font-face{font-family:'NS';src:url('fonts/NotoSansSC-Bold.woff2') format('woff2');font-weight:700}
+  @font-face{font-family:'NSerif';src:url('fonts/NotoSerifSC-Black.woff2') format('woff2');font-weight:900}
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;width:100%;height:100%;background:#0A101A;overflow:hidden;
+    font-family:'NS','Microsoft YaHei',sans-serif}
+
+  :root{
+    --bg-hi:#16273A; --bg-mid:#0F1A28; --bg-lo:#0A101A;   /* 与抠图烘焙的底色一致 */
+    --ink:#EDF4FC; --ink2:rgba(228,240,252,.88); --ink3:rgba(200,220,244,.72);
+    --line:rgba(158,202,244,.36);
+    --gold:#E8CE8E; --up:#E0504E; --down:#3E9E8A; --cool:#8E83D8; --warn:#E39A38;
+  }
+
+  .stage{position:fixed;inset:0;overflow:hidden;
+    background:linear-gradient(180deg,var(--bg-hi) 0%,var(--bg-mid) 30%,var(--bg-mid) 72%,var(--bg-lo) 100%)}
+
+  /* ── 顶部打下来的光束：用「顶部径向辉光」而不是 clip-path 梯形 ──
+     梯形 + blur 会留下直边，看起来是一块实心三角板，不是光。径向辉光没有硬边。 */
+  .beam{position:absolute;left:-22%;top:-16%;width:144%;height:80%;
+    background:radial-gradient(ellipse 46% 100% at 50% 0%,
+      rgba(186,222,255,.28), rgba(140,190,240,.11) 46%, rgba(120,170,225,0) 74%);
+    filter:blur(30px); mix-blend-mode:screen}
+  .beam.core{left:-10%;width:120%;height:74%;
+    background:radial-gradient(ellipse 13% 94% at 50% 0%,
+      rgba(240,250,255,.42), rgba(190,225,255,.13) 52%, rgba(170,210,250,0) 82%);
+    filter:blur(22px)}
+  .pool{position:absolute;left:50%;top:40%;width:1500px;height:1180px;margin:-590px 0 0 -750px;
+    background:radial-gradient(closest-side, rgba(126,184,248,.20), rgba(96,150,220,.07) 52%, transparent 76%);
+    mix-blend-mode:screen}
+  /* 暗角分两层：
+     ① .vig 在内容【之下】—— 只压背景，主力暗角放这里（压到 0.80 也不怕）
+     ② .vig2 在内容【之上】—— 只做很轻的四角收边，压到 0.28 就够
+     ⚠️ 踩过：暗角整层盖在内容上，卡片实测明度被从 0.29 压到 0.153，
+        对背景只剩 +0.08（判据要 >0.15），卡片直接"糊"在背景里看不出来。 */
+  .vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(62% 46% at 50% 38%, transparent 36%, rgba(0,0,0,.46) 74%, rgba(0,0,0,.86) 100%)}
+  .vig2{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(74% 58% at 50% 44%, transparent 52%, rgba(0,0,0,.16) 82%, rgba(0,0,0,.28) 100%)}
+
+  /* ── 镜头 ── */
+  .shot{position:absolute;inset:0;opacity:0;visibility:hidden}
+
+  /* 标题区 */
+  .hd{position:absolute;left:72px;right:72px;top:132px;text-align:center}
+  .tag{display:inline-block;padding:8px 20px 9px;border-radius:999px;margin-bottom:20px;
+    font-size:26px;font-weight:700;letter-spacing:.06em;color:#FFD9D9;
+    background:rgba(224,80,78,.16);border:1px solid rgba(224,80,78,.55);
+    box-shadow:0 0 22px rgba(224,80,78,.22)}
+  .hd h1{margin:0;font-weight:900;font-size:78px;line-height:1.12;letter-spacing:.01em;color:var(--ink);
+    text-shadow:0 0 32px rgba(150,200,255,.42), 0 4px 18px rgba(0,0,0,.6)}
+  .hd h1 .hl{background:linear-gradient(180deg,#FFFFFF,#B9D6F5);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hd .sub{margin:16px 0 0;font-size:30px;font-weight:700;color:var(--ink2);letter-spacing:.02em}
+  .hd .rule{width:96px;height:3px;margin:22px auto 0;border-radius:2px;
+    background:linear-gradient(90deg,transparent,rgba(180,215,250,.85),transparent)}
+
+  /* 主视觉：3D 元素。max-width 放到安全区满宽 —— 素材多为 16:9 里切出的宽幅，
+     宽度先被吃满，高度才 500 左右；限到 1000 会让元素在竖屏里显得更小。 */
+  .hero{position:absolute;left:0;right:0;top:396px;height:772px;
+    display:flex;align-items:center;justify-content:center}
+  .hero img{max-width:1032px;max-height:772px;object-fit:contain;
+    -webkit-mask-image:radial-gradient(ellipse 74% 70% at 50% 50%, #000 58%, rgba(0,0,0,.55) 80%, transparent 100%);
+    mask-image:radial-gradient(ellipse 74% 70% at 50% 50%, #000 58%, rgba(0,0,0,.55) 80%, transparent 100%);
+    filter:drop-shadow(0 26px 60px rgba(40,90,150,.55))}
+
+  /* 形态 A：图标 + 下方逐条解释（不用卡片） */
+  .bullets{position:absolute;left:96px;right:96px;top:1216px;margin:0;padding:0;list-style:none}
+  .bullets li{display:flex;align-items:baseline;gap:18px;margin-bottom:26px;
+    font-size:36px;font-weight:700;color:var(--ink2);line-height:1.34}
+  .bullets li .n{flex:none;width:44px;height:44px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;
+    color:#0B1522;background:linear-gradient(180deg,#BEDCFA,#7FAEDC);
+    box-shadow:0 0 18px rgba(140,196,255,.6)}
+  .bullets li em{font-style:normal;color:#FFFFFF}
+  .bullets li .dim{color:var(--ink3)}
+
+  /* 形态 B：图标 + 数据卡片 */
+  .cards{position:absolute;left:72px;right:72px;top:1228px;display:flex;gap:22px}
+  .card{flex:1;position:relative;border-radius:22px;padding:30px 24px 28px;text-align:center;
+    background:linear-gradient(180deg, rgba(60,90,126,.94), rgba(24,39,58,.96));
+    border:1px solid var(--line);
+    box-shadow:0 20px 46px rgba(0,0,0,.58), 0 0 0 1px rgba(0,0,0,.55),
+               inset 0 2px 0 rgba(214,236,255,.20), inset 0 -2px 0 rgba(0,0,0,.45)}
+  .card .lab{font-size:27px;font-weight:700;color:var(--ink3);letter-spacing:.02em}
+  .card .val{margin-top:12px;font-weight:900;font-size:60px;line-height:1;color:#FFFFFF;
+    text-shadow:0 0 26px rgba(150,205,255,.5)}
+  .card .val .u{font-size:30px;font-weight:700;margin-left:6px;color:var(--ink2)}
+  .card .note{margin-top:14px;font-size:24px;font-weight:700;color:var(--ink3)}
+  .card.warn{border-color:rgba(227,154,56,.55)}
+  .card.warn .val{color:var(--warn);text-shadow:0 0 26px rgba(227,154,56,.42)}
+  .card.up{border-color:rgba(224,80,78,.55)}
+  .card.up .val{color:var(--up);text-shadow:0 0 26px rgba(224,80,78,.42)}
+  .card.cool{border-color:rgba(142,131,216,.55)}
+  .card.cool .val{color:var(--cool);text-shadow:0 0 26px rgba(142,131,216,.45)}
+
+  /* 底部字幕条（参考图的实心黑条） */
+  .cap{position:absolute;left:0;right:0;bottom:96px;text-align:center}
+  .cap span{display:inline-block;max-width:900px;padding:20px 38px 22px;
+    font-size:38px;font-weight:900;color:#FFFFFF;letter-spacing:.01em;
+    background:rgba(0,0,0,.80);box-shadow:0 0 0 1px rgba(180,214,250,.22), 0 16px 40px rgba(0,0,0,.5)}
+  .cap span .k{color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="beam"></div>
+  <div class="beam core" id="beamCore"></div>
+  <div class="pool" id="pool"></div>
+  <div class="vig"></div>
+  <div id="shots"></div>
+  <div class="vig2"></div>
+</div>
+
+<script>
+(function(){
+  /* ═══════ 分镜表：两种呈现形态混排 ═══════
+     form:'hero'   封面（只有大标题 + 元素）
+     form:'bullets' 形态 A —— 图标 + 下方逐条字幕（不适合用卡片时）
+     form:'cards'  形态 B —— 图标 + 数据卡片                      */
+  /* hs = 主视觉额外放大倍数。素材多是从 16:9 片子里切出的【宽幅】，
+     竖屏里宽度受限后高度只剩 300~400px，视觉体量压不住画面 —— 就靠 hs 放大到出血，
+     边缘由 mask 羽化，不会露出生硬边界。窄高型素材（如 1800x2009）保持 1。 */
+  const SHOTS = [
+    { st:0.0, et:4.2, form:'hero', src:'assets/elem_01.png', hs:1.34,
+      title:'主标题第一行', title2:'主标题第二行',
+      sub:'副标题：一句话说清这张图在讲什么', cap:'底部字幕条：一句能被记住的结论' },
+
+    { st:4.2, et:8.6, form:'bullets', src:'assets/elem_09.png', hs:1.18,
+      title:'形态 A：图标 + 逐条字幕',
+      sub:'不适合用卡片罗列时走这条',
+      bullets:[
+        { n:'1', t:'第一条要点', d:'一句补充说明' },
+        { n:'2', t:'第二条要点', d:'一句补充说明' },
+        { n:'3', t:'第三条要点', d:'一句补充说明' },
+      ],
+      cap:'底部字幕条' },
+
+    { st:8.6, et:13.0, form:'cards', src:'assets/elem_12.png',
+      title:'形态 B：图标 + 数据卡片',
+      sub:'有可对比的数字时走这条',
+      cards:[
+        { lab:'指标名', val:'-40', u:'%', note:'口径说明', tone:'up' },
+        { lab:'指标名', val:'0', u:'', note:'口径说明', tone:'warn' },
+      ],
+      cap:'底部字幕条' },
+
+    { st:13.0, et:17.4, form:'cards', src:'assets/elem_10.png',
+      title:'形态 B 变体：三卡 / 带标签',
+      sub:'副标题',
+      tag:'标签胶囊',
+      cards:[
+        { lab:'指标名', val:'底线', u:'', note:'口径说明', tone:'cool' },
+        { lab:'指标名', val:'远离', u:'', note:'口径说明', tone:'up' },
+      ],
+      cap:'底部字幕条' },
+  ];
+  window.__duration = SHOTS[SHOTS.length-1].et;
+
+  const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+  const lp = (a,b,x)=> clamp((x-a)/(b-a),0,1);            // 线性进度
+  const ez = x => x<0.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2; // easeInOutQuad
+
+  const host = document.getElementById('shots');
+  const nodes = SHOTS.map((s,i)=>{
+    const sec = document.createElement('section');
+    sec.className = 'shot';
+    const cardHTML = (s.cards||[]).map(c=>`
+      <div class="card ${c.tone||''}">
+        <div class="lab">${c.lab}</div>
+        <div class="val">${c.val}${c.u?`<span class="u">${c.u}</span>`:''}</div>
+        <div class="note">${c.note}</div>
+      </div>`).join('');
+    const bulletHTML = (s.bullets||[]).map(b=>`
+      <li><span class="n">${b.n}</span><span>${b.t}<span class="dim"> · ${b.d}</span></span></li>`).join('');
+    sec.innerHTML = `
+      <div class="hd">
+        ${s.tag?`<div class="tag">${s.tag}</div>`:''}
+        <h1><span class="hl">${s.title}</span>${s.title2?`<br>${s.title2}`:''}</h1>
+        ${s.sub?`<p class="sub">${s.sub}</p>`:''}
+        <div class="rule"></div>
+      </div>
+      <div class="hero"><img src="${s.src}" alt=""></div>
+      ${bulletHTML?`<ul class="bullets">${bulletHTML}</ul>`:''}
+      ${cardHTML?`<div class="cards">${cardHTML}</div>`:''}
+      ${s.cap?`<div class="cap"><span>${s.cap}</span></div>`:''}
+    `;
+    host.appendChild(sec);
+    return { sec,
+      hero: sec.querySelector('.hero img'),
+      hd: sec.querySelector('.hd'),
+      cards: [...sec.querySelectorAll('.card')],
+      bullets: [...sec.querySelectorAll('.bullets li')],
+      cap: sec.querySelector('.cap') };
+  });
+
+  const beamCore = document.getElementById('beamCore');
+  const pool = document.getElementById('pool');
+
+  window.__render = function(t){
+    // 光束呼吸（很慢，只做聚焦感，不要闪）
+    const ph = 2*Math.PI*t/8;
+    beamCore.style.opacity = (0.80 + 0.20*Math.sin(ph)).toFixed(3);
+    pool.style.opacity     = (0.84 + 0.16*Math.sin(ph+1.1)).toFixed(3);
+
+    SHOTS.forEach((s,i)=>{
+      const on = t >= s.st && t <= s.et;
+      const n = nodes[i];
+      if(!on){ n.sec.style.opacity = 0; n.sec.style.visibility = 'hidden'; return; }
+      n.sec.style.visibility = 'visible';
+      n.sec.style.opacity = 1;
+
+      const x = t - s.st, dur = s.et - s.st;
+
+      // 主线入场：0 → 0.5s
+      const eIn = ez(lp(0,0.50,x));
+      n.hd.style.opacity = eIn;
+      n.hd.style.transform = `translateY(${(-24*(1-eIn)).toFixed(1)}px)`;
+
+      const hIn = ez(lp(0.12,0.72,x));
+      n.hero.style.opacity = hIn;
+      n.hero.style.transform = `translateY(${(18*(1-hIn) + 9*Math.sin(x*0.85)).toFixed(1)}px) `
+        + `scale(${((0.93+0.07*hIn) * (s.hs||1)).toFixed(4)})`;
+
+      // 卡片错峰上浮
+      n.cards.forEach((c,k)=> {
+        const p = ez(lp(0.55+0.13*k, 0.95+0.13*k, x));
+        c.style.opacity = p;
+        c.style.transform = `translateY(${(26*(1-p)).toFixed(1)}px)`;
+      });
+      // 逐条字幕
+      n.bullets.forEach((li,k)=> {
+        const p = ez(lp(0.50+0.16*k, 0.92+0.16*k, x));
+        li.style.opacity = p;
+        li.style.transform = `translateX(${(-18*(1-p)).toFixed(1)}px)`;
+      });
+      // 底部字幕条最后进，走之前先退，避免硬切
+      if(n.cap){
+        const p = ez(lp(0.85,1.15,x)) * (1-ez(lp(dur-0.35,dur-0.05,x)));
+        n.cap.style.opacity = p;
+        n.cap.style.transform = `translateY(${(16*(1-p)).toFixed(1)}px)`;
+      }
+    });
+  };
+  window.__render(0);
+})();
+</script>
+</body>
+</html>

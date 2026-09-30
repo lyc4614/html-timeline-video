@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>等距立体场景 DEMO</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;width:100%;height:100%;background:#05080F;overflow:hidden}
+  .stage{position:fixed;inset:0;overflow:hidden;
+    perspective:2400px;perspective-origin:50% 42%;
+    background:radial-gradient(60% 44% at 50% 36%, #16273F 0%, #0B1626 48%, #05080F 100%)}
+  .glow{position:absolute;left:50%;top:52%;width:1700px;height:1700px;margin:-850px 0 0 -850px;
+    background:radial-gradient(closest-side, rgba(104,184,255,.28), rgba(70,140,220,.09) 44%, transparent 72%)}
+  .vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(60% 46% at 50% 44%, transparent 40%, rgba(0,0,0,.46) 78%, rgba(0,0,0,.86) 100%)}
+
+  .world{position:absolute;left:50%;top:42%;width:0;height:0;transform-style:preserve-3d}
+  .p{position:absolute;transform-style:preserve-3d}
+
+  /* ── 底座：多层下沉椭圆 = 车削金属厚度 ── */
+  .plinth{border-radius:50%}
+  .deck{border-radius:50%;
+    background-image:
+      radial-gradient(52% 52% at 46% 42%, rgba(150,200,245,.30), rgba(20,34,52,.42) 62%, rgba(4,9,16,.80) 100%),
+      conic-gradient(from 208deg,
+        #47617F 0deg, #7FA0C2 36deg, #33465C 90deg, #86A8CB 140deg,
+        #3A4E65 198deg, #6E90B4 256deg, #2C3C4C 316deg, #47617F 360deg);
+    box-shadow:inset 0 0 0 2px rgba(178,218,252,.55), inset 0 0 90px rgba(0,0,0,.55),
+               0 0 60px rgba(90,165,240,.32)}
+
+  /* ── 盘面细节 ── */
+  .ring{position:absolute;border-radius:50%;border:1px solid rgba(170,212,245,.34)}
+  .ring.hot{border-color:rgba(150,220,255,.70);box-shadow:0 0 18px rgba(120,205,255,.55),inset 0 0 16px rgba(120,205,255,.32)}
+  .tick{position:absolute;left:-1px;top:-1px;width:2px;height:10px;background:rgba(186,220,248,.52)}
+  .tick.hot{background:rgba(160,222,255,.95);box-shadow:0 0 9px rgba(130,208,255,.9)}
+  .trace{position:absolute;width:2px;
+    background:linear-gradient(180deg, rgba(160,215,255,.80), rgba(160,215,255,0))}
+  .pool{position:absolute;border-radius:50%;
+    background:radial-gradient(closest-side, rgba(255,196,120,.30), rgba(255,170,80,.08) 55%, transparent 78%)}
+
+  /* ── 建筑体块 ── */
+  /* 注意：墙体元素 local +Y 经 rotateX(90deg) 映射为世界 +Z（向上），
+     所以元素「底边」在 3D 里是墙顶、元素「顶边」是墙脚。渐变角度按此设。 */
+  .tp{position:absolute;left:0;top:0;width:100%;height:100%;
+    background:linear-gradient(135deg,#7C9BBC,#3E5674 50%,#5A7793);
+    box-shadow:inset 0 0 0 1.5px rgba(198,232,255,.55), inset 0 0 30px rgba(0,0,0,.42)}
+  .tp.roof2{background:linear-gradient(135deg,#8FAECB,#456080 52%,#63819E)}
+  .wall{position:absolute;transform-origin:0 0;
+    background-color:#1A2534;
+    background-image:
+      linear-gradient(0deg, rgba(210,240,255,.62), rgba(210,240,255,0) 4%),      /* 檐口亮边 */
+      linear-gradient(180deg, rgba(3,6,11,.72), rgba(3,6,11,0) 34%),             /* 墙脚压暗（减弱，别吃掉窗带） */
+      repeating-linear-gradient(90deg, rgba(5,9,16,.88) 0 2px, rgba(5,9,16,0) 2px 16px),
+      repeating-linear-gradient(0deg, rgba(6,10,18,0) 0 42px, rgba(6,10,18,.62) 42px 63px),
+      repeating-linear-gradient(0deg, #FFD79A 0 6px, rgba(16,26,40,.86) 6px 21px);
+    box-shadow:inset 0 0 40px rgba(120,200,255,.12), 0 0 30px rgba(255,182,92,.38)}
+  .wall.cool{background-image:
+      linear-gradient(0deg, rgba(210,240,255,.62), rgba(210,240,255,0) 4%),
+      linear-gradient(180deg, rgba(3,6,11,.72), rgba(3,6,11,0) 34%),
+      repeating-linear-gradient(90deg, rgba(5,9,16,.88) 0 2px, rgba(5,9,16,0) 2px 16px),
+      repeating-linear-gradient(0deg, rgba(6,10,18,0) 0 42px, rgba(6,10,18,.62) 42px 63px),
+      repeating-linear-gradient(0deg, #C6E8FF 0 6px, rgba(16,26,40,.86) 6px 21px)}
+  .wall.dark{background-image:
+      linear-gradient(0deg, rgba(210,240,255,.46), rgba(210,240,255,0) 4%),
+      linear-gradient(180deg, rgba(3,6,11,.78), rgba(3,6,11,.10) 40%),
+      repeating-linear-gradient(0deg, rgba(130,190,240,.52) 0 5px, rgba(12,20,30,.92) 5px 20px)}
+
+  /* ── 穹顶 / 碟形天线 ── */
+  .dome{border-radius:50%;
+    background:radial-gradient(38% 30% at 36% 22%,
+      #FFFFFF 0%, rgba(206,236,255,.90) 22%, rgba(110,170,228,.80) 48%,
+      rgba(38,74,116,.90) 76%, rgba(18,38,64,.95) 100%);
+    box-shadow:inset 0 0 0 2px rgba(200,234,255,.70), inset 0 0 36px rgba(150,205,255,.40),
+               0 0 48px rgba(130,200,255,.50)}
+  /* 碟形天线 = 金属外圈 + 玻璃镜面（不是发光球） */
+  .dish{border-radius:50%;
+    background:conic-gradient(from 200deg,
+      #96B6D6 0deg, #43607F 58deg, #A8C6E4 128deg, #3C5570 198deg, #8FB0D0 278deg, #96B6D6 360deg);
+    box-shadow:inset 0 0 0 2px rgba(202,234,255,.72), 0 0 32px rgba(120,196,255,.42)}
+  .dishglass{position:absolute;inset:11%;border-radius:50%;
+    background:radial-gradient(46% 38% at 32% 24%,
+      rgba(255,255,255,.96) 0%, rgba(172,216,255,.56) 32%,
+      rgba(54,104,162,.58) 66%, rgba(16,36,62,.92) 100%);
+    box-shadow:inset 0 0 26px rgba(150,210,255,.50), inset 0 0 0 1.5px rgba(212,240,255,.62)}
+  .dishtrack{position:absolute;inset:34%;border-radius:50%;
+    border:2px solid rgba(150,220,255,.7);
+    border-right-color:transparent;border-top-color:rgba(255,208,146,.85);
+    box-shadow:0 0 16px rgba(140,210,255,.6)}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="glow" id="glow"></div>
+  <div class="world" id="world"></div>
+  <div class="vig"></div>
+</div>
+<script>
+(function(){
+  const world = document.getElementById('world');
+  const glow  = document.getElementById('glow');
+
+  const el = (cls, css, parent) => {
+    const d = document.createElement('div');
+    d.className = cls;
+    if (css) d.style.cssText = css;
+    (parent || world).appendChild(d);
+    return d;
+  };
+
+  // ═══════ 1. 底座 ═══════
+  for (let i = 0; i < 9; i++) {
+    const r = 332 - i * 3.4, k = i / 8;
+    const c = `rgb(${Math.round(52 - 26 * k)},${Math.round(74 - 36 * k)},${Math.round(100 - 50 * k)})`;
+    el('p plinth', `left:${-r}px;top:${-r}px;width:${r*2}px;height:${r*2}px;`
+      + `background:${c};transform:translateZ(${-i*12}px);`
+      + `box-shadow:inset 0 0 0 1.5px rgba(160,205,240,${(0.34-0.028*i).toFixed(3)})`);
+  }
+
+  // ═══════ 2. 主盘面 ═══════
+  el('p deck', 'left:-332px;top:-332px;width:664px;height:664px;transform:translateZ(0px)');
+
+  // ═══════ 3. 同心环 ═══════
+  [[318,1],[296,0],[252,1],[208,0],[154,1],[98,0]].forEach(([r,hot]) => {
+    el('p ring' + (hot ? ' hot' : ''),
+       `left:${-r}px;top:${-r}px;width:${r*2}px;height:${r*2}px;transform:translateZ(1px)`);
+  });
+
+  // ═══════ 4. 刻度 ═══════
+  for (let i = 0; i < 96; i++) {
+    const hot = i % 8 === 0;
+    el('tick' + (hot ? ' hot' : ''),
+       `transform:translateZ(1px) rotateZ(${i*3.75}deg) translateY(-${hot ? 320 : 312}px)`);
+  }
+
+  // ═══════ 5. 放射走线 ═══════
+  for (let i = 0; i < 14; i++) {
+    const a = i * (360/14) + 6, len = 110 + ((i * 53) % 145);
+    el('trace', `left:-1px;top:0;height:${len}px;transform:translateZ(2px) rotateZ(${a - 90}deg)`);
+  }
+
+  // ═══════ 6. 体块构造器 ═══════
+  // 两套旋转配方（矩阵推导，非目测）：
+  //   沿 X 展开的墙：rotateX(90deg)           X→X,  Y→+Z, Z→−Y
+  //   沿 Y 展开的墙：rotate3d(1,1,1,120deg)   X→Y,  Y→Z,  Z→X
+  function box(x, y, w, d, h, o) {
+    o = o || {};
+    const z0 = o.z0 || 0;
+    const g = el('p', `left:${x}px;top:${y}px;width:${w}px;height:${d}px;transform:translateZ(${z0}px)`);
+    const wc = o.cool ? ' cool' : (o.dark ? ' dark' : '');
+    el('tp' + (o.roof ? ' roof2' : ''), `transform:translateZ(${h}px)`, g);
+    el('wall' + wc, `left:0;top:0;width:${w}px;height:${h}px;transform:rotateX(90deg)`, g);
+    el('wall' + wc, `left:0;top:${d}px;width:${w}px;height:${h}px;transform:rotateX(90deg)`, g);
+    el('wall' + wc, `left:0;top:0;width:${d}px;height:${h}px;transform:rotate3d(1,1,1,120deg)`, g);
+    el('wall' + wc, `left:${w}px;top:0;width:${d}px;height:${h}px;transform:rotate3d(1,1,1,120deg)`, g);
+    return g;
+  }
+
+  // ═══════ 7. 地面暖光池（建筑内部透光） ═══════
+  [[-95,-95,190],[-160,30,150],[120,-105,150],[175,90,140],[-25,190,150]]
+    .forEach(([x,y,r]) => el('pool',
+      `left:${x - r/2}px;top:${y - r/2}px;width:${r}px;height:${r}px;transform:translateZ(3px)`));
+
+  // ═══════ 8. 建筑群 ═══════
+  const B = [
+    [-150,-150, 130,  96,  86, {roof:1}],
+    [  10,-190, 110,  88, 108, {roof:1}],
+    [ 170,-120,  96, 110,  80, {dark:1}],
+    [ 200,  40, 120,  96,  96, {roof:1}],
+    [  60, 170, 140,  90,  78, {cool:1}],
+    [-130, 175, 110, 100,  92, {roof:1}],
+    [-215,  20,  84, 120, 126, {roof:1}],
+    [-232,-138,  62,  62, 168, {roof:1}],
+    [ -50,  30, 150, 140,  64, {dark:1}],
+  ];
+  B.forEach(b => box(b[0], b[1], b[2], b[3], b[4], b[5]));
+
+  // 空中连廊（体块之间的横向咬合，参考图的关键细节）
+  [[-24, -62, 74, 14, 52], [108, 58, 14, 62, 58], [-132, 122, 14, 58, 46]]
+    .forEach(b => box(b[0], b[1], b[2], b[3], 12, { z0: b[4], dark: 1 }));
+
+  // 屋顶细针（拉高轮廓的竖向节奏）
+  [[62, -188, 110], [198, 46, 98], [-234, -136, 172]]
+    .forEach(p => box(p[0], p[1], 5, 5, 34, { z0: p[2], dark: 1 }));
+
+  // ═══════ 9. 中央玻璃穹顶 ═══════
+  el('p dome', 'left:-64px;top:-64px;width:128px;height:128px;transform:translateZ(80px)');
+  el('p ring hot', 'left:-77px;top:-77px;width:154px;height:154px;transform:translateZ(66px)');
+
+  // ═══════ 10. 塔顶碟形天线（参考图的辨识点） ═══════
+  box(-228, -134, 18, 18, 62, {z0:168, dark:1});
+  const dish = el('p dish',
+    'left:-282px;top:-190px;width:162px;height:162px;'
+    + 'transform:translateZ(234px) rotateX(-40deg) rotateZ(16deg)');
+  el('dishglass', '', dish);
+  const track = el('dishtrack', '', dish);
+  el('p', 'left:-240px;top:-148px;width:82px;height:82px;border-radius:50%;'
+    + 'background:radial-gradient(closest-side, rgba(200,232,255,.62), rgba(30,62,98,.92) 70%);'
+    + 'transform:translateZ(250px) rotateX(-40deg) rotateZ(16deg)');
+
+  // ═══════ 11. 渲染契约（画幅自适应：竖版居中 / 横版靠左留字区） ═══════
+  const PERIOD = 6, ROT0 = -38, SWAY = 13;   // 周期对齐片长，一镜一个完整摆动循环
+  const stageEl = document.querySelector('.stage');
+  const W = window.innerWidth, H = window.innerHeight;
+  const LAND = W > H;
+  // 元素宽度对齐画幅「短边」的 86% —— 竖版短边是宽、横版短边是高，两个画幅视觉体量一致
+  const SCALE = LAND ? (1.02 * H) / 955 : (0.92 * W) / 955;
+  world.style.left = LAND ? '34%' : '50%';
+  world.style.top  = LAND ? '50%' : '42%';
+  stageEl.style.perspectiveOrigin = LAND ? '34% 50%' : '50% 42%';
+  glow.style.left = LAND ? '34%' : '50%';
+  glow.style.top  = LAND ? '50%' : '52%';
+  window.__duration = 6;
+  window.__render = function (t) {
+    const ph  = 2 * Math.PI * t / PERIOD;
+    const rot = ROT0 + SWAY * Math.sin(ph);
+    const bob = 11 * Math.sin(ph + 1.15) * (LAND ? 1 : 1);
+    world.style.transform = `translateZ(${bob.toFixed(2)}px) rotateX(58deg) rotateZ(${rot.toFixed(3)}deg) scale(${SCALE.toFixed(4)})`;
+    glow.style.opacity  = (0.82 + 0.18 * Math.sin(ph)).toFixed(3);
+    track.style.transform = `rotateZ(${(t * 46).toFixed(1)}deg)`;
+  };
+  window.__render(0);
+})();
+</script>
+</body>
+</html>

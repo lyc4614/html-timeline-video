@@ -1,14 +1,17 @@
 /* DOM 几何检测：找出所有超出安全区的文本元素
    比读图可靠 —— 图上网格线/卡片边框都会干扰判断，直接读元素盒子才准。
    用法: node check_overflow.cjs "<t1|t2|...>" "<名1|名2|...>"
-   安全区默认左右各 46px（画布 1080）。
+   画幅默认竖版 1080×1920，横版传 VIDEO_W=1920 VIDEO_H=1080（别只改一个，会不一致）。
+   安全区左右留白默认 46px，用 SAFE_X 覆盖。
    工程根目录：优先取环境变量 PROJ_ROOT，否则取当前工作目录。 */
 const puppeteer = require('puppeteer-core');
 const path = require('path');
 
 const ROOT = process.env.PROJ_ROOT || process.cwd();
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const SAFE = 46, W = 1080;
+const W = +(process.env.VIDEO_W || 1080);
+const H = +(process.env.VIDEO_H || 1920);
+const SAFE = +(process.env.SAFE_X || 46);
 
 const ts = (process.argv[2] || '').split('|').map(Number);
 const names = (process.argv[3] || '').split('|');
@@ -20,7 +23,7 @@ const names = (process.argv[3] || '').split('|');
            '--allow-file-access-from-files']
   });
   const page = await browser.newPage();
-  await page.setViewport({ width: W, height: 1920, deviceScaleFactor: 1 });
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
   const url = 'file:///' + path.join(ROOT, 'index.html').replace(/\\/g, '/');
   await page.goto(url, { waitUntil: 'load' });
   await page.evaluate('document.fonts.ready');
@@ -31,7 +34,7 @@ const names = (process.argv[3] || '').split('|');
     await page.evaluate((t) => window.__render(t), ts[i]);
     await new Promise(r => setTimeout(r, 160));
 
-    const bad = await page.evaluate((SAFE) => {
+    const bad = await page.evaluate((cfg) => {
       const out = [];
       const SKIP = new Set(['pbar', 'rail', 'sub', 'bg']);
       document.querySelectorAll('#root *').forEach(el => {
@@ -44,14 +47,14 @@ const names = (process.argv[3] || '').split('|');
         while (p) { if (p.id && SKIP.has(p.id)) return; p = p.parentElement; }
         const r = el.getBoundingClientRect();
         if (!r.width || !r.height) return;
-        const L = r.left, R = 1080 - r.right;
-        if (L < SAFE || R < SAFE) {
+        const L = r.left, R = cfg.W - r.right;
+        if (L < cfg.SAFE || R < cfg.SAFE) {
           out.push({ txt: txt.slice(0, 26), cls: (el.className || '').toString().slice(0, 24),
                      L: Math.round(L), R: Math.round(R) });
         }
       });
       return out;
-    }, SAFE);
+    }, { SAFE, W });
 
     if (bad.length) {
       anyBad = true;
@@ -59,6 +62,6 @@ const names = (process.argv[3] || '').split('|');
       bad.forEach(b => console.log(`    L${String(b.L).padStart(4)} R${String(b.R).padStart(4)}  [${b.cls}] ${b.txt}`));
     }
   }
-  if (!anyBad) console.log('全部镜头均在安全区内（左右各 ' + SAFE + 'px）');
+  if (!anyBad) console.log('全部镜头均在安全区内（左右各 ' + SAFE + 'px，画幅 ' + W + '×' + H + '）');
   await browser.close();
 })().catch(e => { console.error('ERR', (e && e.stack) || e); process.exit(1); });

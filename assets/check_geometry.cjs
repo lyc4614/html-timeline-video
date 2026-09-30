@@ -20,16 +20,27 @@ const ROOT = __dirname.replace(/\\/g, '/').replace('/_tools', '');
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const TARGET = process.argv[2] || 'index.html';
 
+// 画幅：默认竖版 1080×1920；横版传 VIDEO_W=1920 VIDEO_H=1080（视口与 X 溢出判据都跟着改）
+const W = +(process.env.VIDEO_W || 1080);
+const H = +(process.env.VIDEO_H || 1920);
+
 // 整帧容器：它们按设计就该压满，跳过不代表没事，是不该参与溢出判定
 const FRAME_CTN = ['wrap', 'stage', 'bands', 'cur', 'shot', 'root'];
 
 // 禁区（右上 logo / 底部章节轨 / 底部字幕）
 // 不要把 .chap/.sign 区设成禁区 —— 那正是它们该待的地方。
-const ZONES = [
-  { name: 'logo',     x0: 700, y0: 60,   x1: 1080, y1: 170 },
-  { name: 'rail',     x0: 180, y0: 1500, x1: 900,  y1: 1580 },
-  { name: 'subtitle', x0: 0,   y0: 1660, x1: 1080, y1: 1930 },
-];
+// ⚠ 下面这组是**竖版坐标**。横版的版式不是竖版的等比缩放，
+//   禁区必须重新给（用 ZONES_JSON 传），否则这项检查等于没做。
+const ZONES = process.env.ZONES_JSON
+  ? JSON.parse(process.env.ZONES_JSON)
+  : [
+    { name: 'logo',     x0: 700, y0: 60,   x1: 1080, y1: 170 },
+    { name: 'rail',     x0: 180, y0: 1500, x1: 900,  y1: 1580 },
+    { name: 'subtitle', x0: 0,   y0: 1660, x1: 1080, y1: 1930 },
+  ];
+if (W > H && !process.env.ZONES_JSON) {
+  console.log('!! 画幅是横版，但禁区还在用竖版默认坐标 —— 请用 ZONES_JSON 传入横版禁区，否则本项检查无效。');
+}
 
 // 从源码解析每个镜头的 [起,止]，避免手抄时刻表漏掉镜头
 function parseShots(src) {
@@ -54,7 +65,7 @@ const clsOf = e => (e.className && e.className.baseVal !== undefined
            '--disable-lcd-text', '--font-render-hinting=none', '--allow-file-access-from-files']
   });
   const page = await browser.newPage();
-  await page.setViewport({ width: 1080, height: 1920, deviceScaleFactor: 1 });
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
   await page.goto('file:///' + path.join(ROOT, TARGET).replace(/\\/g, '/'), { waitUntil: 'load' });
   await page.waitForFunction('typeof window.__render === "function"');
 
@@ -64,7 +75,7 @@ const clsOf = e => (e.className && e.className.baseVal !== undefined
     if (b - a < 0.45) continue;                      // 转场垫片镜头跳过
     await page.evaluate(tt => window.__render(tt), t);
 
-    const bad = await page.evaluate((t, ZONES, FRAME_CTN) => {
+    const bad = await page.evaluate((t, ZONES, FRAME_CTN, cfgW) => {
       const out = [];
       const clsOf = e => (e.className && e.className.baseVal !== undefined
         ? e.className.baseVal : (e.className || '')).toString().trim();
@@ -80,7 +91,7 @@ const clsOf = e => (e.className && e.className.baseVal !== undefined
           const txt = (e.textContent || '').trim().slice(0, 26);
 
           // ① 横向溢出：左右任意一边超出画幅即报
-          if (r.left < -2 || r.right > 1082) {
+          if (r.left < -2 || r.right > cfgW + 2) {
             out.push({ kind: 'X溢出', t, tag: e.tagName, cls: cs, txt,
                        box: [r.left, r.top, r.right, r.bottom].map(v => +v.toFixed(0)) });
           }
@@ -98,7 +109,7 @@ const clsOf = e => (e.className && e.className.baseVal !== undefined
         }
       }
       return out;
-    }, t, ZONES, FRAME_CTN);
+    }, t, ZONES, FRAME_CTN, W);
 
     const seen = new Set();
     for (const o of bad) {
