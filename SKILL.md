@@ -36,7 +36,7 @@ check.cjs    定点抽帧到 check/，改视觉时先抽帧再全渲
 | 文件 | 用途 |
 |---|---|
 | `index-template.html` | 页面骨架（全局 `#bg` + `#root` + `__render` 契约 + 花字/卡片 class） |
-| `render.cjs` | 逐帧截图 + ffmpeg 编码；`--test` 散布采样测速，`--noenc` 只截图 |
+| `render.cjs` | 逐帧截图 + ffmpeg 编码；`--test` 散布采样测速，`--noenc` 只截图。**渲染前显式预热全部 @font-face 并硬断言**（`await document.fonts.ready` 是空转的，见 8.12），不过就 exit 5；`--test` 写 `frames_test/`，不污染正式帧序列。 |
 | `check.cjs` | 定点抽帧质检（`node check.cjs 1.5 10 44 145`） |
 | `gen_bg.py` | 烘焙背景底图（底色+辉光+暗角+星点 → bg.png），参数按参考视频标定 |
 | `sample_ref.py` | 逆向采样参考视频的真实规格（底色/网格间距/辉光/星点密度） |
@@ -1770,7 +1770,7 @@ if (card && card !== el) {
 结果报的是「外框越界」。必须**给卡片固定高度**（`height:60px`）才会真正触发，
 实测报 `top=-14 bot=+65`，这才证明判据有效。
 
-## ⑧ 从零起手一个新项目：最容易踩的九个坑（2026-10 实测）
+## ⑧ 从零起手一个新项目：最容易踩的那些坑（2026-10 实测）
 
 前面七类是「改造已有成片」的坑。以下九条是**从 SRT 起步、再到改视觉**时才会遇到的，
 症状隐蔽得多 —— 首版渲染完全正常，只是「看着有点怪」或「数据在骗人」。
@@ -2052,6 +2052,64 @@ rows.forEach((r, i) => {
 > 「这一段有几句口播」比「我想画几个卡片」更该是起点。
 > 本次两处错配（镜 9 的 8 句配 6 个元素、镜 13 前 6.4 秒讲查询却画对比卡）
 > 都是先画了画面、没对口播造成的。
+
+### 8.12 `await document.fonts.ready` 是**空转的** —— 首帧会截到回退字体
+
+`render.cjs` 里原来写的是：
+
+```js
+await page.evaluate(() => document.fonts.ready);   // ❌ 什么都没等到
+await new Promise(r => setTimeout(r, 400));
+```
+
+**`document.fonts.ready` 在「没有任何 pending 字体请求」时会立刻 resolve。**
+页面刚加载、所有镜头还都隐藏（opacity 0 / display:none）时没有任何字形被请求 ——
+它就是一个立即完成的空 promise。
+
+实测同一个页面（只读 `status`，不调 `check()`）：
+
+| 时刻 | 4 个 @font-face 的状态 |
+|---|---|
+| 刚加载完 | 全 `unloaded` |
+| **抄完上面那段等待（ready + 400ms）** | **仍全 `unloaded`** |
+| 渲染第 1 帧后 | 仍全 `unloaded` |
+| 显式 `document.fonts.load(...)` 后 | **全 `loaded`** |
+
+后果：文本首次可见的那几帧被以回退字体渲染（`font-display` 默认行为是 block → 甚至直接空白），
+**之后**浏览器才发现要加载字体。而且**验收查不出来** —— PSNR 比的是「成片 vs 当前帧序列」，
+两边错得一模一样，分数照样漂亮。
+
+正确写法 —— 用每个声明的 face 主动 load 一次：
+
+```js
+await page.evaluate(async () => {
+  await Promise.all([...document.fonts].map(f =>
+    document.fonts.load(`${f.weight} 64px "${f.family}"`, '测试文字0123456789').catch(() => {})));
+  await document.fonts.ready;
+});
+```
+
+> ⚠ **写这个诊断脚本时，我的第一版探针把结论搞反了。**
+> 我在测量前调了 `document.fonts.check()` / `canvas.measureText()` ——
+> 而**这两个调用本身就会触发字体加载**，于是测出「等待后已加载」，看起来一切正常。
+> **测量工具改变了被测对象。**
+> 教训：量「某资源有没有加载」时只能用**只读手段**（读 `status`），
+> 任何会触发加载的 API 必须放到最后一次再测。
+
+断言要**硬失败**：预热后还有 face 没 loaded 就 `exit 5`。
+旧版判据扫的是 `#root *` 里**所有**元素（含未入场的隐藏镜头），必然报一堆假警告 ——
+**警告久了就没人看。要么硬失败，要么别报。**
+
+### 8.13 渲染前必须做的三件事（顺序不能换）
+
+```bash
+$NODE diagnose.cjs                 # ① 页面有没有抛异常（契约没建立时先跑它）
+$NODE render.cjs --test --noenc    # ② 测速 + 顺带验证字体断言通过，估算总时长
+md5sum index.html > source.md5     # ③ 记住源码指纹，事后能证明成片出自这份源码
+```
+
+② 不只是为了估算 —— 它会在正式渲之前把字体/图片就绪断言跑一遍。
+**几十分钟的渲染，宁可在这里多花 1 分钟。**
 
 ## 卡片语言：把「商务感」拿掉（图标驱动配方）
 

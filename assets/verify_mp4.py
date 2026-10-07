@@ -117,14 +117,19 @@ try:
     import subprocess as _sp
     node = os.environ.get('NODE_BIN', '')
     if not node:
-        # 从 puppeteer-core 已安装的位置反推 node
+        # 从 puppeteer-core 已安装的位置反推 node（**不写死版本号** —— 运行时一升级就失效）。
+        # ⚠ 基目录是**用户主目录**下的 .workbuddy，不是 %LOCALAPPDATA%（那是 AppData\Local）。
+        #   这两处都会得到 node='' → subprocess 拿空字符串当可执行文件 → WinError 87，
+        #   然后静默回退正则：验收范围从 15 镜缩到 10 镜，**而且照样报 ok**。（两种都踩过）
         import glob as _glob
-        for c in _glob.glob(os.path.join(os.environ.get('LOCALAPPDATA', ''),
-                                         '.workbuddy', 'binaries', 'node',
-                                         'versions', '*', 'node.exe')):
+        for c in sorted(_glob.glob(os.path.join(
+                os.path.expanduser('~'), '.workbuddy', 'binaries', 'node',
+                'versions', '*', 'node.exe'))):
             if os.path.exists(c):
                 node = c
                 break
+    if not node:
+        raise RuntimeError('找不到 node —— 请设环境变量 NODE_BIN 指过去')
     js = ("const p=require('puppeteer-core'),path=require('path');"
           "(async()=>{const b=await p.launch({executablePath:process.env.CHROME_PATH,"
           "headless:'new',userDataDir:path.join(process.cwd(),'.chrome-profile'),"
@@ -136,14 +141,18 @@ try:
           "await b.close();})();")
     r = _sp.run([node, '-e', js], capture_output=True, text=True,
                 env=dict(os.environ, CHROME_PATH=os.environ.get(
-                    'CHROME_PATH', os.path.join(os.environ.get('LOCALAPPDATA', ''),
-                                                'Google', 'Chrome', 'Application', 'chrome.exe'))))
+                    'CHROME_PATH', os.environ.get('CHROME_PATH') or os.path.join(
+                        os.environ.get('LOCALAPPDATA', ''),
+                        'Google', 'Chrome', 'Application', 'chrome.exe'))))
     line = [l for l in r.stdout.strip().split('\n') if l.startswith('[')]
     if line:
         shots = [(float(a), float(b)) for a, b in json.loads(line[-1])]
         shot_src = 'window.__shots（页面实测，与渲染同一份数据）'
 except Exception as e:
-    print('  （取 __shots 失败：%s，回退正则）' % e)
+    # 降级必须**出声**。正则只匹配字面量数字的 add(S0,S1,...)，
+    # 匹配不到 SCHOOLS.forEach 里生成的镜头 —— 实测 15 镜只解析出 10 个。
+    print('  ⚠⚠ 取 __shots 失败：%s' % e)
+    print('      → 回退正则：镜头覆盖**会不全**（正则匹配不到 forEach 里生成的镜头）')
 
 if not shots:
     shots = [(float(a), float(b)) for a, b in

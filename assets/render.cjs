@@ -20,8 +20,9 @@ const { execFileSync } = require('child_process');
 
 const ROOT = process.env.VIDEO_ROOT || __dirname;
 const TEST = process.argv.includes('--test');
-// --test 必须写 frames_test/ 而不是 frames/：否则「全渲→测速→编码」这个顺序
-// 会用散布时刻的画面覆盖前 N 帧，成片错乱且不报错。
+// --test 写 frames_test/ 而不是 frames/：否则「全渲→测速→编码」这个顺序
+// 会用散布时刻的画面覆盖前 N 帧，成片错乱且不报错（ffmpeg 按首帧尺寸统一缩放，
+// 画面看着正常，内容已经不对）。这是我给上游仓库提的 S2 缺陷。
 const FRAMES = path.join(ROOT, TEST ? 'frames_test' : 'frames');
 const W = +(process.env.VIDEO_W || 1080);
 const H = +(process.env.VIDEO_H || 1920);
@@ -36,6 +37,7 @@ function firstExisting(list) {
 function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
   const cands = [
+    (process.env.LOCALAPPDATA || '') + '/Google/Chrome/Application/chrome.exe',
     'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
     'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
@@ -93,34 +95,38 @@ const log = (m) => process.stdout.write(m + '\n');
   await page.goto(url, { waitUntil: 'load' });
   await page.waitForFunction('typeof window.__render === "function"');
 
-  // 字体就绪：只等 fonts 不够，<img> 也要等；onerror 也要 resolve，否则路径写错会卡到超时
-  await page.evaluate(() => {
-    var pend = [];
-    if (document.fonts && document.fonts.ready) pend.push(document.fonts.ready);
-    [].slice.call(document.images).forEach(function (im) {
-      if (im.complete && im.naturalWidth) return;
-      pend.push(new Promise(function (r) { im.onload = r; im.onerror = r; }));
-    });
-    return Promise.all(pend);
+  // 字体预热 —— 不能只等 document.fonts.ready。
+  // ⚠ fonts.ready 在「没有任何 pending 请求」时会**立刻 resolve**：实测照抄下面这段
+  //   「push(ready) → await → 等 400ms」之后，4 个 @font-face 仍然全是 unloaded。
+  //   后果是文本首次可见的那几帧被以回退字体截走（font-display 默认 block → 直接空白），
+  //   而且不报错、验收也查不出来（PSNR 只比成片与帧序列，两边一样错）。
+  // 正确做法：用每个声明的 face 主动 load 一次，再断言。
+  await page.evaluate(async () => {
+    await Promise.all([...document.fonts].map(f =>
+      document.fonts.load(`${f.weight} 64px "${f.family}"`, '测试文字0123456789').catch(() => {})));
+    await document.fonts.ready;
+    // <img> 也要等；onerror 也要 resolve，否则路径写错会卡到超时
+    const pend = [].slice.call(document.images)
+      .filter(im => !(im.complete && im.naturalWidth))
+      .map(im => new Promise(r => { im.onload = r; im.onerror = r; }));
+    await Promise.all(pend);
   });
-  await new Promise(r => setTimeout(r, 400));
-  // 再断言一次。注意「unloaded ≠ 失败」：两个字重指向同一份 woff2 时，
-  // 未被任何元素用到的那条会停在 unloaded，只检查**实际用到的** family/weight。
-  const fontCheck = await page.evaluate(() => {
-    const used = new Set();
-    document.querySelectorAll('#root *').forEach(el => {
-      const cs = getComputedStyle(el);
-      used.add(cs.fontFamily + '|' + cs.fontWeight);
-    });
-    const bad = [];
-    document.fonts.forEach(f => {
-      if (f.status === 'loaded') return;
-      for (const u of used) if (u.indexOf(f.family) >= 0 && u.indexOf(String(f.weight)) >= 0) bad.push(f.family + '/' + f.weight);
-    });
-    return { total: document.fonts.size, loaded: [...document.fonts].filter(f => f.status === 'loaded').length, bad: [...new Set(bad)] };
-  });
+  await new Promise(r => setTimeout(r, 300));
+  // 断言：预热之后每个 face 都必须是 loaded。**不通过就中止** ——
+  // 字体没生效会毁掉整片，而这是几十分钟的渲染，宁可早停。
+  // （旧版的判据是「只查实际用到的 family/weight」，但它扫的是 #root * 里**所有**元素，
+  //   含尚未入场的隐藏镜头 → 必然报一堆假警告，警告久了就没人看。）
+  const fontCheck = await page.evaluate(() => ({
+    total: document.fonts.size,
+    loaded: [...document.fonts].filter(f => f.status === 'loaded').length,
+    bad: [...document.fonts].filter(f => f.status !== 'loaded').map(f => `${f.family}/${f.weight}`),
+  }));
   log(`fonts: ${fontCheck.loaded}/${fontCheck.total} loaded` +
-      (fontCheck.bad.length ? '  警告(实际用到的未加载): ' + fontCheck.bad.join(', ') : ''));
+      (fontCheck.bad.length ? '  未加载: ' + fontCheck.bad.join(', ') : ''));
+  if (fontCheck.total > 0 && fontCheck.bad.length) {
+    log('✗ 字体未就绪 —— 继续渲会得到回退字体的画面，已中止');
+    process.exit(5);
+  }
 
   const DUR = await page.evaluate('window.__duration');
   let total = Math.round(DUR * FPS);
