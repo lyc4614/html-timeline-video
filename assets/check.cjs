@@ -41,6 +41,21 @@ if (!times.length) { process.stdout.write('用法: node check.cjs <秒> [秒...]
   await page.goto('file:///' + path.join(ROOT, 'index.html').replace(/\\/g, '/'), { waitUntil: 'load' });
   await page.waitForFunction('typeof window.__render === "function"');
 
+  // 字体 + 图片就绪：只等 __render 存在是不够的。
+  // 用了 <img> 素材（如品牌 logo）时，不等图片会抽到**空白**，而且不报任何错 ——
+  // 症状是「该位置什么都没有，其他元素都正常」。
+  // onerror 也必须 resolve，否则路径写错会让 Promise 永不 resolve、脚本卡死。
+  await page.evaluate(() => {
+    var pend = [];
+    if (document.fonts && document.fonts.ready) pend.push(document.fonts.ready);
+    [].slice.call(document.images).forEach(function (im) {
+      if (im.complete && im.naturalWidth) return;
+      pend.push(new Promise(function (r) { im.onload = r; im.onerror = r; }));
+    });
+    return Promise.all(pend);
+  });
+  await new Promise(r => setTimeout(r, 350));
+
   for (const t of times) {
     await page.evaluate((tt) => window.__render(tt), t);
     const f = path.join(OUT, 't-' + String(t).replace('.', '_') + '.png');

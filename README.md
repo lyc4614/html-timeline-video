@@ -112,11 +112,37 @@ assets/
   shoot_storyboard.cjs           批量出静态分镜图
   make_compare_sheet.py          方案对比总览图
   make_specimen_sheet.py         字体候选样张
+  diagnose.cjs                   页面级错误捕获（__render 超时先跑它，看真实异常）
+  probe_coverage.cjs             量内容占安全区 + 横向溢出（内置双向验证 --selftest）
+  rerender_range.cjs             局部重渲：只重跑改动的帧号区间（内建画幅尺寸守卫）
+  verify_mp4.py                  成片反抽帧验收：画幅守卫 + PSNR ±2 帧对齐 + 接触表
+  icon-library.js                内联 SVG 图标库（21 个线性图标 + 三档尺寸 + 语义变体 CSS）
+  make_ornament.py                生成花饰分隔线/卷草图样 + feTurbulence 卡面颗粒（参数化，写回 CSS 标记区）
+  sync_card_css.py                把 card-system.css 内联进正片（单一真源 → 成片）
+  probe_card.cjs                 卡片/边框体检：纹样与内容的最近距离 + 重叠 px²（含尺子自检 + 反例页）
+  shot_page.cjs                  给任意 HTML 拍全页图（含字体+图片等待；静态页用这个）
+  probe_card_selftest.html       probe_card 的反例页（负向对照，必须被抓到）
+  card_lab.html + card-system.css 卡片实验台 + 样式单一真源（实验台与正片同源）
   fonts/                         思源宋体/黑体 + 优设标题黑（OFL / 免费商用）
 ```
 
 脚本都通过**环境变量或命令行参数**取路径（`CHROME_PATH` / `PROJ_ROOT` / `VIDEO_ROOT`），
 可直接拿到自己的工程里用，无需改源码。
+
+### 改一版只重跑几秒：局部重渲
+
+全片 6874 帧要 50 分钟。只改了几秒的内容时，用 `rerender_range.cjs` 只重跑受影响的帧：
+
+```bash
+node rerender_range.cjs --check-size       # 先跑尺寸守卫自检
+node rerender_range.cjs 41.7 51.0          # 只重跑 41.7s–51.0s，其余帧沿用磁盘旧图
+```
+
+实测 7 条字幕分散在 0–145s，合并成 5 段共 1054 帧，**50 分钟 → 8 分钟**。
+脚本内建三道画幅守卫（重渲前 / 重渲后 / 首帧单独提示）——
+局部重渲最隐蔽的事故是画幅默认值与 `render.cjs` 不一致，
+ffmpeg 会按首帧尺寸把整片静默缩放成错误画幅，画面看着正常、规格却是错的。
+守卫命中时退出码 **4**，与 `verify_mp4.py` 一致。
 
 ---
 

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>probe_card 反向验证用反例</title>
+<link rel="stylesheet" href="card-system.css">
+<style>body{margin:0;width:1080px;background:#0B0B0D;padding:40px 60px;}
+  .ico{display:flex;align-items:center;justify-content:center;flex:0 0 auto;border-radius:14px;
+    width:44px;height:44px;background:rgba(255,242,206,.10);border:1px solid rgba(226,203,138,.4);}</style>
+</head>
+<body>
+<!-- ============================================================================
+     probe_card.cjs 的反例（负向对照）。
+
+     为什么必须有这个文件：
+       检查工具自己也会错。probe_card 曾经因为 background-position 解析按空格裸切，
+       把右下角花算成 (856,0) —— 于是「右下角压内容」永远查不出来，
+       正片报「✓ 无重叠」是**假通过**。
+
+     判据：本页必须让 probe_card 退出码 6 并列出重叠。
+           如果它在这里报「✓ 无重叠」，说明尺子坏了，正片的结论一律不能信。
+
+     两个反例分别破坏两条约束：
+       ① inline padding 绕开「内容边距 ≥ 角花深入量」  → 四角全压
+       ② 角花尺寸放大到 60px 但内容边距不变           → 四角全压
+     ========================================================================== -->
+
+  <!-- 反例 ①：inline padding:8px 直接绕开约束（正片上一版就是这个病） -->
+  <div class="card" id="neg1" style="padding:8px;margin-bottom:40px;">
+    <div style="display:flex;align-items:center;gap:20px;">
+      <div class="ico"></div>
+      <div style="font-size:32px;font-weight:900;color:#FFF6CE;">反例①：inline padding 绕开约束</div>
+    </div>
+  </div>
+
+  <!-- 反例 ②：角花 60px / 内缩 5px（深入量 65），但内容边距只有 37px -->
+  <div class="card" id="neg2" style="padding:37px 38px;">
+    <div style="display:flex;align-items:center;gap:20px;">
+      <div class="ico"></div>
+      <div style="font-size:32px;font-weight:900;color:#FFF6CE;">反例②：角花放大到 60px</div>
+    </div>
+  </div>
+
+  <style>
+    #neg2::before{
+      background-size:60px 60px;
+      background-position:5px 5px, calc(100% - 5px) calc(100% - 5px);}
+  </style>
+</body>
+</html>

@@ -19,12 +19,14 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ROOT = process.env.VIDEO_ROOT || __dirname;
-const FRAMES = path.join(ROOT, 'frames');
+const TEST = process.argv.includes('--test');
+// --test 必须写 frames_test/ 而不是 frames/：否则「全渲→测速→编码」这个顺序
+// 会用散布时刻的画面覆盖前 N 帧，成片错乱且不报错。
+const FRAMES = path.join(ROOT, TEST ? 'frames_test' : 'frames');
 const W = +(process.env.VIDEO_W || 1080);
 const H = +(process.env.VIDEO_H || 1920);
 const FPS = +(process.env.VIDEO_FPS || 30);
 const CRF = String(process.env.VIDEO_CRF || 16);
-const TEST = process.argv.includes('--test');
 const NOENC = process.argv.includes('--noenc');
 
 function firstExisting(list) {
@@ -90,6 +92,35 @@ const log = (m) => process.stdout.write(m + '\n');
   const url = 'file:///' + path.join(ROOT, 'index.html').replace(/\\/g, '/');
   await page.goto(url, { waitUntil: 'load' });
   await page.waitForFunction('typeof window.__render === "function"');
+
+  // 字体就绪：只等 fonts 不够，<img> 也要等；onerror 也要 resolve，否则路径写错会卡到超时
+  await page.evaluate(() => {
+    var pend = [];
+    if (document.fonts && document.fonts.ready) pend.push(document.fonts.ready);
+    [].slice.call(document.images).forEach(function (im) {
+      if (im.complete && im.naturalWidth) return;
+      pend.push(new Promise(function (r) { im.onload = r; im.onerror = r; }));
+    });
+    return Promise.all(pend);
+  });
+  await new Promise(r => setTimeout(r, 400));
+  // 再断言一次。注意「unloaded ≠ 失败」：两个字重指向同一份 woff2 时，
+  // 未被任何元素用到的那条会停在 unloaded，只检查**实际用到的** family/weight。
+  const fontCheck = await page.evaluate(() => {
+    const used = new Set();
+    document.querySelectorAll('#root *').forEach(el => {
+      const cs = getComputedStyle(el);
+      used.add(cs.fontFamily + '|' + cs.fontWeight);
+    });
+    const bad = [];
+    document.fonts.forEach(f => {
+      if (f.status === 'loaded') return;
+      for (const u of used) if (u.indexOf(f.family) >= 0 && u.indexOf(String(f.weight)) >= 0) bad.push(f.family + '/' + f.weight);
+    });
+    return { total: document.fonts.size, loaded: [...document.fonts].filter(f => f.status === 'loaded').length, bad: [...new Set(bad)] };
+  });
+  log(`fonts: ${fontCheck.loaded}/${fontCheck.total} loaded` +
+      (fontCheck.bad.length ? '  警告(实际用到的未加载): ' + fontCheck.bad.join(', ') : ''));
 
   const DUR = await page.evaluate('window.__duration');
   let total = Math.round(DUR * FPS);

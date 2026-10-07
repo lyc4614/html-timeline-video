@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>卡片实验台 · card_lab</title>
+<!-- 与正片同源：index.html 内联的就是这份 card-system.css。
+     改一处两边同时变 —— 实验台不是「另做一套」，它就是正片的样式。 -->
+<link rel="stylesheet" href="card-system.css">
+<style>
+  body{margin:0;width:1080px;background:#0B0B0D;color:#EDE7DA;
+    font-family:"Source Han Serif SC","SrcSerifSC","Noto Serif SC",serif;
+    background-image:linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px),
+                     linear-gradient(180deg,rgba(255,255,255,.045) 1px,transparent 1px);
+    background-size:38px 38px;}
+  .lab{padding:56px 72px 72px;}
+  h2{font-size:30px;font-weight:900;color:#F2E39C;margin:56px 0 8px;letter-spacing:2px;}
+  h2:first-child{margin-top:0;}
+  .hint{font-size:21px;color:rgba(240,228,198,.60);margin:0 0 22px;line-height:1.6;}
+  .stack{display:flex;flex-direction:column;gap:26px;}
+  .duo{display:flex;gap:20px;}
+  code{font-family:Consolas,monospace;font-size:20px;color:#7FE0C8;}
+</style>
+</head>
+<body>
+<div class="lab">
+
+  <h2>1 · 框（L1）：一套边框语言</h2>
+  <p class="hint">亮金细描边 + 内圈细线（box-shadow inset，自动跟随圆角）+ 金色辉光 + 顶部受光。
+     卡面六层：<strong>颗粒（feTurbulence 真噪声）→ 织纹×2 → 顶部受光 → 边缘压暗 → 基底</strong>。
+     纯平渐变就是「廉价感」的来源。</p>
+  <div class="stack" id="s1"></div>
+
+  <h2>2 · 纹样档位（L2）：只画在内容进不去的水平带里</h2>
+  <p class="hint">顶部 = 花饰分隔线，底部 = 卷草（垂直翻转 + 加密）。
+     约束 <code>P ≥ O + F + 6</code>：顶部 34+8+6=48 ≤ padding-top 50；底部 36+6+6=48 ≤ padding-bottom 50。</p>
+  <div class="stack" id="s2"></div>
+
+  <h2>3 · 语义色：靠彩边 + 极淡色晕，不做整卡彩描边</h2>
+  <p class="hint">上一版 <code>.card</code> 根本没有 <code>border</code>，这些 <code>border-color</code> 全是死代码 ——
+      语义卡的彩边从来没画出来过。现在有真边框了。</p>
+  <div class="duo" id="s3a" style="margin-bottom:20px;"></div>
+  <div class="duo" id="s3b"></div>
+
+  <h2>4 · 排行条：不画纹样</h2>
+  <p class="hint">84–141px 高的行里，2 行文字就占掉大半高度，装饰带永远放不下。
+      统一靠<strong>边框语言</strong>，不靠把装饰复制到装不下它的容器上。</p>
+  <div class="stack" id="s4"></div>
+
+  <h2>5 · 典型卡片组合（图标 + 标题 + 副标题 / 瓦片双卡）</h2>
+  <div class="stack" id="s5"></div>
+
+</div>
+
+<script>
+const ICON = {
+  users:'<path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/><path d="M17 4.5a4 4 0 0 1 0 7"/><path d="M19 14.5a6 6 0 0 1 3 5.2V21"/>',
+  key:'<circle cx="8" cy="8" r="4.5"/><path d="M11.2 11.2 21 21"/><path d="M17.5 17.5 15 20"/><path d="M20 14.5 17.5 17"/>',
+  rank:'<path d="M4 20h16"/><path d="M7 20v-6"/><path d="M12 20V8"/><path d="M17 20v-9"/>',
+  chart:'<path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l4-6 3 3 4-7"/>',
+  warn:'<path d="M12 4 2.5 20h19z"/><path d="M12 10v4"/><path d="M12 17.2v.4"/>',
+  doc:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6"/><path d="M9 16h4"/>',
+  school:'<path d="M12 4 3 8.5 12 13l9-4.5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/>',
+  trend:'<path d="M4 17l5-6 3 3 7-8"/><path d="M15 6h4v4"/>',
+  bulb:'<path d="M9 17h6"/><path d="M10 20h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9V17h7v-3.1A6 6 0 0 0 12 3Z"/>',
+  flag:'<path d="M6 21V4"/><path d="M6 5h11l-2 4 2 4H6"/>',
+  target:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/>',
+};
+const ico = (n, tone) =>
+  `<div class="ico ${tone || ''}"><svg viewBox="0 0 24 24" fill="none">${ICON[n] || ''}</svg></div>`;
+
+const st = document.createElement('style');
+st.textContent = '.ico{display:flex;align-items:center;justify-content:center;flex:0 0 auto;border-radius:14px;' +
+  'background:linear-gradient(160deg,rgba(255,246,214,.14),rgba(255,255,255,.03));' +
+  'border:1px solid rgba(232,211,150,.42);box-shadow:inset 0 1px 0 rgba(255,246,214,.26),0 0 20px rgba(222,198,132,.10);}' +
+  '.ico{width:44px;height:44px;} .ico svg{width:24px;height:24px;}' +
+  '.ico.up{border-color:rgba(224,80,78,.58);background:linear-gradient(160deg,rgba(224,80,78,.22),rgba(224,80,78,.05));}' +
+  '.ico.td{border-color:rgba(62,158,138,.58);background:linear-gradient(160deg,rgba(62,158,138,.22),rgba(62,158,138,.05));}' +
+  '.ico.wr{border-color:rgba(227,154,56,.58);background:linear-gradient(160deg,rgba(227,154,56,.22),rgba(227,154,56,.05));}' +
+  '.ico svg{stroke:#E8D9A8;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}' +
+  '.ico.up svg{stroke:#FF9189;} .ico.td svg{stroke:#7FE0C8;} .ico.wr svg{stroke:#FFD79A;}';
+document.head.appendChild(st);
+
+const rowCard = (ic, tone, title, sub) => `
+  <div style="display:flex;align-items:center;gap:24px;">
+    ${ico(ic, tone)}
+    <div style="min-width:0;">
+      <div style="font-size:34px;font-weight:900;color:#FFF6CE;line-height:1.3;">${title}</div>
+      <div style="font-size:25px;color:rgba(240,228,198,.76);margin-top:8px;line-height:1.5;">${sub}</div>
+    </div>
+  </div>`;
+const shell = (cls, inner) => `<div class="${cls}">${inner}</div>`;
+
+document.getElementById('s1').innerHTML =
+  shell('card', rowCard('users','td','结论卡（.card）','亮金描边 + 颗粒 + 织纹 + 辉光 —— 参考片的三要素')) +
+  shell('rrow', rowCard('rank','','排行条（.rrow）','与卡片共用同一套边框语言，只是不画纹样'));
+
+document.getElementById('s2').innerHTML =
+  shell('card', rowCard('key','wr','默认档 · 顶 620×34 / 底 240×40','内容边距 50px ≥ 34+8+6 与 36+6+6')) +
+  shell('card sm', rowCard('key','wr','紧凑档 · 顶 420×26 / 底 168×30','内容边距 40/44 —— 瓦片卡用')) +
+  shell('card plain', rowCard('doc','','紧凑无纹（.card.plain）','明确不要纹样时用；padding 收到 26/32'));
+
+document.getElementById('s3a').innerHTML =
+  shell('card s-tu', rowCard('rank','up','.s-tu 红','录取线 / 竞争 / 风险')) +
+  shell('card s-td', rowCard('chart','td','.s-td 青','对比 / 参照 / 中性数据'));
+document.getElementById('s3b').innerHTML =
+  shell('card s-gold', rowCard('key','wr','.s-gold 金','结论 / 行动 / 品牌')) +
+  shell('card s-warn', rowCard('warn','wr','.s-warn 橙','提醒 / 免责 / 注意'));
+
+document.getElementById('s4').innerHTML =
+  shell('rrow', rowCard('school','td','示例排行项 · 一行','与 2 行行高一致（min-height 96px），列表不会忽高忽低')) +
+  shell('rrow', rowCard('chart','up','示例排行项 · 两行','副标题一行说明，第二行补充上下文'));
+
+document.getElementById('s5').innerHTML =
+  shell('card s-tu', rowCard('users','up','示例卡 · 结论型','左侧图标 + 结论句；语义红＝风险/竞争') +
+  shell('card s-gold', rowCard('doc','wr','示例卡 · 行动型','语义金＝结论/行动/品牌',)) +
+  shell('card s-gold', rowCard('flag','wr','示例卡 · 长文案','文案偏长时卡会变高，注意别把整屏撑出安全区')) +
+  `<div class="duo">
+     ${shell('card sm s-tu', `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:6px 0;">
+        <div class="ico up" style="width:62px;height:62px;border-radius:18px;"><svg viewBox="0 0 24 24" fill="none" style="width:34px;height:34px;stroke:#FF9189;">${ICON.trend}</svg></div>
+        <div style="font-size:52px;font-weight:900;color:#FF9189;line-height:1.2;">指标 A</div>
+        <div class="lb" style="font-size:23px;">粗体数值</div></div>`)}
+     ${shell('card sm s-warn', `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:6px 0;">
+        <div class="ico wr" style="width:62px;height:62px;border-radius:18px;"><svg viewBox="0 0 24 24" fill="none" style="width:34px;height:34px;stroke:#FFD79A;">${ICON.bulb}</svg></div>
+        <div style="font-size:52px;font-weight:900;color:#FFD79A;line-height:1.2;">指标 B</div>
+        <div class="lb" style="font-size:23px;">小字标签</div></div>`)}
+   </div>`;
+
+window.__ready = true;
+</script>
+</body>
+</html>
