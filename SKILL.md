@@ -2716,7 +2716,8 @@ stage.style.perspectiveOrigin = LAND ? '34% 50%' : '50% 42%';
 
 ## 复用现成 3D 图标素材：深蓝聚焦式竖屏方案
 
-> **本节已独立成技能 `icon-spotlight-video`（含模板、抠图脚本、量化工具链）。**
+> **本节已独立成技能 `icon-spotlight-video`（含模板、15 个抠好的元素、抠图脚本、量化工具链）。**
+> 已开源：https://github.com/lyc4614/icon-spotlight-video
 > 要做这套版式直接用那个技能，这里只留两条与主链路共享的结论：
 >
 > - **暗角必须分两层**：重暗角在内容【之下】压背景，轻收边在内容【之上】（≤ .28）。
