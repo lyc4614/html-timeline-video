@@ -83,7 +83,7 @@ const log = (m) => process.stdout.write(m + '\n');
     headless: 'new',
     // 必须给独立 userDataDir：本机 Chrome 若正在运行，共用默认 profile 时
     // headless 会「启动即退」，报错只有一句空泛的 connect 失败（踩过）。
-    userDataDir: path.join(ROOT, '.chrome-profile'),
+    userDataDir: path.join(require('os').tmpdir(), 'html-timeline-chrome-profile'),
     args: ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1',
            '--disable-lcd-text', '--font-render-hinting=none', '--allow-file-access-from-files',
            '--disable-gpu', '--disable-dev-shm-usage']

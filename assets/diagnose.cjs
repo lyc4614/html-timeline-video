@@ -5,8 +5,14 @@ const puppeteer = require('puppeteer-core');
 const path = require('path');
 const fs = require('fs');
 
-const ROOT = __dirname;
+// 工程根：优先 VIDEO_ROOT（与 render.cjs / probe_card.cjs 同一套），缺省才是脚本所在目录。
+// ⚠ 只锚 __dirname 时，横版工程的 index.html 根本传不进来（连绝对路径都会被拼错，见下）。
+const ROOT = process.env.VIDEO_ROOT || __dirname;
 const TARGET = process.argv[2] || 'index.html';
+// 画幅也走环境变量：写死竖版会把横版工程以 1080×1920 打开，版式全错、
+// 抽帧「看到的内容」整个不对，而脚本不报错。
+const W = +(process.env.VIDEO_W || 1080);
+const H = +(process.env.VIDEO_H || 1920);
 
 function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -22,17 +28,19 @@ function findChrome() {
 }
 
 (async () => {
-  const file = path.join(ROOT, TARGET);
+  // 绝对路径直接用 —— Windows 下 path.join(ROOT, 'C:/x/y') 会拼成 `assets\C:\x\y`，
+  // 报「文件不存在」却看不出是拼接方式的问题。
+  const file = path.isAbsolute(TARGET) ? TARGET : path.join(ROOT, TARGET);
   if (!fs.existsSync(file)) { console.log('文件不存在:', file); process.exit(1); }
   const browser = await puppeteer.launch({
     executablePath: findChrome(), headless: 'new',
-    userDataDir: path.join(ROOT, '.chrome-profile'),
+    userDataDir: path.join(require('os').tmpdir(), 'html-timeline-chrome-profile'),
     args: ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1',
            '--disable-lcd-text', '--font-render-hinting=none', '--allow-file-access-from-files',
            '--disable-gpu', '--disable-dev-shm-usage']
   });
   const page = await browser.newPage();
-  await page.setViewport({ width: 1080, height: 1920, deviceScaleFactor: 1 });
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
 
   page.on('console', m => console.log('[console:' + m.type() + ']', m.text()));
   page.on('pageerror', e => console.log('[pageerror]', e.message, '\n', (e.stack || '').split('\n').slice(0, 4).join('\n')));
@@ -57,7 +65,12 @@ function findChrome() {
     for (const t of [2, 45, 190]) {
       await page.evaluate(tt => window.__render(tt), t);
       const vis = await page.evaluate(() => {
-        const on = [...document.querySelectorAll('#root .shot')].filter(s => s.style.display === 'block');
+        // 切镜头有两套写法：inline `display:block`（早期）与 `visibility`+`opacity`（主线，SKILL.md 用它）。
+        // 只认 display 时，主线写法的正片会**恒返回空数组**，看着像「什么都没渲染出来」。
+        const on = [...document.querySelectorAll('#root .shot')].filter(s => {
+          const cs = getComputedStyle(s);
+          return cs.display !== 'none' && cs.visibility !== 'hidden' && parseFloat(cs.opacity) > 0.05;
+        });
         return on.map(s => ({ op: s.style.opacity, txt: (s.textContent || '').trim().slice(0, 28) }));
       });
       console.log('  t=' + t + 's 可见镜头:', JSON.stringify(vis));

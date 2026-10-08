@@ -133,11 +133,21 @@ function pageProbe(t, doDump) {
              w: +r.width.toFixed(1), h: +r.height.toFixed(1) };
   };
 
-  const shots = (window.__shots || []).map(s =>
+  // 镜头表：优先 window.__shots（与渲染同一份数据）；老工程没有这个契约时，
+  // 回退到 DOM 上的 data-st / data-et（早期写法）—— 不能直接当静态页处理。
+  let shots = (window.__shots || []).map(s =>
     Array.isArray(s) ? { s: s[0], e: s[1] } : { s: s.s != null ? s.s : s.start, e: s.e != null ? s.e : s.end });
+  if (!shots.length) {
+    shots = [...document.querySelectorAll('.shot[data-st]')].map(el => ({
+      s: +el.dataset.st, e: +el.dataset.et,
+    })).filter(x => isFinite(x.s) && isFinite(x.e));
+  }
 
-  // 静态页（实验台）没有 __render / __shots —— 直接量整页
-  const isStatic = typeof window.__render !== 'function' || !shots.length;
+  // 静态页（实验台）没有 __render —— 直接量整页。
+  // ⚠ 判据只能用「没有 __render」。曾把 !shots.length 也并进来，于是
+  //   「动态页但没声明 window.__shots」的老工程被误当静态页 → 不调 __render，
+  //   页面停在初始态 → 量到 0 张卡却报「✓ 无角花压内容」（本工具要防的假通过）。
+  const isStatic = typeof window.__render !== 'function';
 
   let scope;
   if (isStatic) {
@@ -279,7 +289,7 @@ function pageProbe(t, doDump) {
   const browser = await puppeteer.launch({
     executablePath: findChrome(),
     headless: 'new',
-    userDataDir: path.join(ROOT, '.chrome-profile'),
+    userDataDir: path.join(require('os').tmpdir(), 'html-timeline-chrome-profile'),
     args: ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1',
            '--disable-lcd-text', '--font-render-hinting=none',
            '--allow-file-access-from-files', '--disable-gpu', '--disable-dev-shm-usage'],
@@ -309,8 +319,15 @@ function pageProbe(t, doDump) {
     if (STATIC_MODE) {
       times = [0];   // 静态页：整页量一次
     } else {
-      const shots = await page.evaluate(() => (window.__shots || []).map(s =>
-        Array.isArray(s) ? [s[0], s[1]] : [s.s != null ? s.s : s.start, s.e != null ? s.e : s.end]));
+      const shots = await page.evaluate(() => {
+        const a = (window.__shots || []).map(s =>
+          Array.isArray(s) ? [s[0], s[1]] : [s.s != null ? s.s : s.start, s.e != null ? s.e : s.end]);
+        if (a.length) return a;
+        // 老工程没有 window.__shots 契约 → 回退 DOM 上的 data-st / data-et。
+        // （不加这条会自动取到 0 个时刻，然后报「一张卡都没量到」）
+        return [...document.querySelectorAll('.shot[data-st]')]
+          .map(el => [+el.dataset.st, +el.dataset.et]).filter(x => isFinite(x[0]) && isFinite(x[1]));
+      });
       // 取每镜「结尾前 0.35s」：此刻该镜所有元素都已入场，布局是最终形态
       times = shots.map(([, e]) => Math.max(0, +(e - 0.35).toFixed(2)));
     }
@@ -400,10 +417,18 @@ function pageProbe(t, doDump) {
 
   await browser.close();
   console.log('\n' + '='.repeat(112));
+  // 「量到 0 张卡」不等于「卡片都没重叠」—— 这种假通过比报错危险得多。
+  if (!allCards.length) {
+    console.log('✗ 一张卡片都没量到 —— 「无重叠」这个结论无效，不能当通过。逐条排查：');
+    console.log('   ① 时刻取错：该镜本来就没有卡片（用 --t <秒> 指定真有卡片的时刻）');
+    console.log('   ② 页面既没有 window.__shots，镜头也没有 data-st/data-et → 镜头表为空');
+    console.log('   ③ 卡片 class 与该工具的选择器不符（跑 --dump 看它到底扫到了什么）');
+    process.exit(6);
+  }
   if (bad) {
     console.log(`✗ 检出 ${bad} 处「角花压内容」—— 修到 0 再出片`);
     process.exit(6);
   }
-  console.log('✓ 无角花压内容');
+  console.log(`✓ ${allCards.length} 张卡片，无角花压内容`);
   process.exit(0);
 })().catch(e => { console.error('probe_card 异常：', e); process.exit(1); });

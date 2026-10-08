@@ -58,7 +58,7 @@ if (!page_file || !out_file) {
 (async () => {
   const browser = await puppeteer.launch({
     executablePath: findChrome(), headless: 'new',
-    userDataDir: path.join(ROOT, '.chrome-profile'),
+    userDataDir: path.join(require('os').tmpdir(), 'html-timeline-chrome-profile'),
     args: ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1',
            '--disable-lcd-text', '--font-render-hinting=none',
            '--allow-file-access-from-files', '--disable-gpu', '--disable-dev-shm-usage'],

@@ -16,7 +16,7 @@
 
 改造到自己项目时：改 CSS_FILE / PAGE / 标记，以及 PROJECT_CHECKS（你的业务锚点）。
 """
-import io, re, sys
+import io, os, re, sys
 
 CSS_FILE = 'card-system.css'
 PAGE = 'index.html'
@@ -51,7 +51,22 @@ for name, fn in PRE_CHECKS:
 if not ok:
     print('先跑 make_ornament.py 生成纹样'); sys.exit(1)
 
+# 正片文件：在**正片工程目录**跑本脚本时，CSS_FILE 与 PAGE 应当同处一目录。
+# 只锚相对路径的话，在技能包 assets/ 里误跑会得到一句裸 FileNotFoundError，
+# 看不出「应该去哪跑」——这里给明确指引。
+if not os.path.exists(PAGE):
+    print('找不到正片 %s —— 本脚本要在**正片工程目录**运行。' % PAGE)
+    print('  技能包 assets/ 里只有 card_lab.html + card-system.css（实验台），没有正片。')
+    print('  用法：把 card-system.css 拷到工程目录，再在工程目录跑 python sync_card_css.py')
+    sys.exit(2)
+if not os.path.exists(CSS_FILE):
+    print('找不到样式源 %s —— 请先把它拷到当前目录，或改 CSS_FILE。' % CSS_FILE)
+    sys.exit(2)
+
 h = io.open(PAGE, encoding='utf-8').read()
+if START_HINT not in h:
+    print('正片里找不到标记 %r —— 先按 SKILL.md 给样式层加上 <<ORN>> 注释标记。' % START_HINT)
+    sys.exit(2)
 k = h.index(START_HINT)
 i0 = h.rindex('/* =', 0, k)      # 注释块的起点
 i1 = h.index(END)                # 注释块的终点

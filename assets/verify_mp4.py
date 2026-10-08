@@ -132,7 +132,7 @@ try:
         raise RuntimeError('找不到 node —— 请设环境变量 NODE_BIN 指过去')
     js = ("const p=require('puppeteer-core'),path=require('path');"
           "(async()=>{const b=await p.launch({executablePath:process.env.CHROME_PATH,"
-          "headless:'new',userDataDir:path.join(process.cwd(),'.chrome-profile'),"
+          "headless:'new',userDataDir:path.join(require('os').tmpdir(), 'html-timeline-chrome-profile'),"
           "args:['--no-sandbox','--allow-file-access-from-files','--disable-gpu']});"
           "const g=await b.newPage();"
           "await g.goto('file:///'+path.join(process.cwd(),'index.html').replace(/\\\\/g,'/'),{waitUntil:'load'});"

@@ -20,10 +20,19 @@ const puppeteer = require('puppeteer-core');
 const path = require('path');
 const fs = require('fs');
 
-const ROOT = __dirname;
-const W = 1080, H = 1920;
-const SAFE_TOP = 196, SAFE_BOT = 1468;      // 与 .stage 的 top/bottom 一致
-const SAFE_X = 64, SAFE_X1 = 1016;
+const ROOT = process.env.VIDEO_ROOT || __dirname;
+const W = +(process.env.VIDEO_W || 1080);
+const H = +(process.env.VIDEO_H || 1920);
+// 安全区默认值与原正片 .stage 的 padding 一致，**随画幅派生**。
+// ⚠ 写死竖版会出两个错：① 横版工程连页都打不开（ROOT 锚在脚本目录）
+//   ② 就算打开了，横版内容横向能到 1810，会被竖版的 x1=1016 全部误判成「横向溢出」。
+const LAND = W > H;
+const DEF = LAND ? { top: 150, bot: 875, x: 96, x1: 1824 }
+                 : { top: 196, bot: 1468, x: 64, x1: 1016 };
+const SAFE_TOP = +(process.env.SAFE_TOP || DEF.top);
+const SAFE_BOT = +(process.env.SAFE_BOT || DEF.bot);
+const SAFE_X   = +(process.env.SAFE_X   || DEF.x);
+const SAFE_X1  = +(process.env.SAFE_X1  || DEF.x1);
 const EXCL = ['#toplogo', '#rail', '#sub', '#pbar', '#brand'];
 // 整帧容器：按设计就该压满，跳过不代表没事，是不该参与「内容占多少」的统计
 const FRAME_CTN = ['shot', 'wrap', 'stage', 'root', 'rows', 'list', 'quad', 'cmp'];
@@ -67,7 +76,7 @@ const probe = (page, t) => page.evaluate((tt) => {
 (async () => {
   const browser = await puppeteer.launch({
     executablePath: findChrome(), headless: 'new',
-    userDataDir: path.join(ROOT, '.chrome-profile'),
+    userDataDir: path.join(require('os').tmpdir(), 'html-timeline-chrome-profile'),
     args: ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1',
            '--disable-lcd-text', '--font-render-hinting=none', '--allow-file-access-from-files',
            '--disable-gpu', '--disable-dev-shm-usage']
@@ -107,7 +116,15 @@ const probe = (page, t) => page.evaluate((tt) => {
   await new Promise(r => setTimeout(r, 400));
   await new Promise(r => setTimeout(r, 400));
 
-  const shots = await page.evaluate(() => (window.__shots || []).map(s => [s.s, s.e]));
+  // 镜头表：优先 window.__shots（与渲染同一份数据）；老工程没有这个契约时回退 DOM 的
+  // data-st / data-et，否则会直接报「拿不到镜头表」——明明页面是完整的。
+  const shots = await page.evaluate(() => {
+    const a = (window.__shots || []).map(s =>
+      Array.isArray(s) ? [s[0], s[1]] : [s.s != null ? s.s : s.start, s.e != null ? s.e : s.end]);
+    if (a.length) return a;
+    return [...document.querySelectorAll('.shot[data-st]')]
+      .map(el => [+el.dataset.st, +el.dataset.et]).filter(x => isFinite(x[0]) && isFinite(x[1]));
+  });
   let times = process.argv.slice(2).map(Number).filter(n => !isNaN(n));
   if (!times.length) {
     if (!shots.length) { console.log('拿不到镜头表，请显式给时间点'); await browser.close(); return; }
@@ -115,7 +132,9 @@ const probe = (page, t) => page.evaluate((tt) => {
     times = shots.map(([s, e]) => Math.min(s + 4.2, e - 0.4));
   }
 
-  console.log('安全区 y ∈ [%d, %d]  高 %d px   x ∈ [%d, %d]\n', SAFE_TOP, SAFE_BOT, SAFE_BOT - SAFE_TOP, SAFE_X, SAFE_X1);
+  console.log('安全区 y ∈ [%d, %d]  高 %d px   x ∈ [%d, %d]', SAFE_TOP, SAFE_BOT, SAFE_BOT - SAFE_TOP, SAFE_X, SAFE_X1);
+  console.log('（口径 = .stage 内容带，即设计意图。要查「是否真的撞到 HUD / 压住字幕」请换视觉安全线：');
+  console.log('  横版实测 SAFE_TOP=122 SAFE_BOT=924 —— 同一批内容在两条线下会得出不同结论，别混用）\n');
   const pad = (s, n) => String(s).padEnd(n);
   console.log(pad('t', 8) + pad('上沿', 8) + pad('下沿', 8) + pad('占安全区', 10) + pad('横向', 8) + '判定');
   console.log('-'.repeat(62));
@@ -128,14 +147,14 @@ const probe = (page, t) => page.evaluate((tt) => {
     const overY = Math.max(0, SAFE_TOP - r.y0, r.y1 - SAFE_BOT);
     const overX = Math.max(0, SAFE_X - r.x0, r.x1 - SAFE_X1);
     const judge = cov < 45 ? '偏空·换布局或补信息'
-      : overY > 1 ? '⚠压禁区' + overY.toFixed(0) + 'px'
+      : overY > 1 ? '⚠超出内容带' + overY.toFixed(0) + 'px'
       : overX > 1 ? '⚠横向溢出' + overX.toFixed(0) + 'px' : 'OK';
     console.log(pad(t.toFixed(1), 8) + pad(r.y0.toFixed(0), 8) + pad(r.y1.toFixed(0), 8) +
       pad(cov.toFixed(0) + '%', 10) + pad((overX > 1 ? overX.toFixed(0) + 'px' : '-'), 8) + judge);
     rows.push({ t, cov, overY, overX, y0: r.y0, y1: r.y1 });
 
     if (DUMP && (overX > 1 || overY > 1)) {
-      const bad = await page.evaluate((tt) => {
+      const bad = await page.evaluate((tt, SF) => {
         window.__render(tt);
         const on = [...document.querySelectorAll('#root .shot')]
           .filter(s => getComputedStyle(s).display !== 'none' && +getComputedStyle(s).opacity > 0.35);
@@ -144,14 +163,14 @@ const probe = (page, t) => page.evaluate((tt) => {
         for (const el of s.querySelectorAll('*')) {
           const rc = el.getBoundingClientRect();
           if (rc.width < 2) continue;
-          if (rc.left < 64 || rc.right > 1016 || rc.top < 196 || rc.bottom > 1468) {
+          if (rc.left < SF.x || rc.right > SF.x1 || rc.top < SF.top || rc.bottom > SF.bot) {
             out.push({ cls: (el.className || el.tagName).toString().slice(0, 26),
               L: +rc.left.toFixed(0), R: +rc.right.toFixed(0), T: +rc.top.toFixed(0), B: +rc.bottom.toFixed(0),
               txt: (el.textContent || '').trim().slice(0, 18) });
           }
         }
         return out.slice(0, 5);
-      }, t);
+      }, t, { top: SAFE_TOP, bot: SAFE_BOT, x: SAFE_X, x1: SAFE_X1 });
       bad.forEach(b => console.log('        ↳ ' + JSON.stringify(b)));
     }
   }
@@ -164,5 +183,5 @@ const probe = (page, t) => page.evaluate((tt) => {
   if (bad.length) console.log('%d 个偏空(<45%%): %s', bad.length,
     bad.map(r => 't=' + r.t.toFixed(1) + '(' + r.cov.toFixed(0) + '%)').join(', '));
   const of = rows.filter(r => r.overY > 1 || r.overX > 1);
-  if (of.length) console.log('⚠ %d 个压禁区: %s', of.length, of.map(r => 't=' + r.t.toFixed(1)).join(', '));
+  if (of.length) console.log('⚠ %d 个超出内容带: %s', of.length, of.map(r => 't=' + r.t.toFixed(1)).join(', '));
 })().catch(e => { console.log('ERROR', e && e.stack || e); process.exit(1); });

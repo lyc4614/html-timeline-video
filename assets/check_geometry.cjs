@@ -60,7 +60,7 @@ const clsOf = e => (e.className && e.className.baseVal !== undefined
 
   const browser = await puppeteer.launch({
     executablePath: CHROME, headless: 'new',
-    userDataDir: path.join(ROOT, '.chrome-profile'),
+    userDataDir: path.join(require('os').tmpdir(), 'html-timeline-chrome-profile'),
     args: ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1',
            '--disable-lcd-text', '--font-render-hinting=none', '--allow-file-access-from-files']
   });

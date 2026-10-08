@@ -17,6 +17,9 @@ rects.json
 _trash*/
 _sheet_tmp/
 
+# ---- Chrome 调试 profile（内含机器绝对路径，绝不入库）----
+.chrome-profile/
+
 # ---- Python ----
 __pycache__/
 *.py[cod]
