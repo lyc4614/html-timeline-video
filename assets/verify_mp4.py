@@ -108,8 +108,16 @@ print('帧序列画幅一致：全部 %d 帧 %dx%d' % (len(files), W, H))
 # 拿不到才回退到正则。正则只匹配字面量数字的 add(S0, S1, ...)，
 # **匹配不到 SCHOOLS.forEach 里的 add(S0, S1, ...)** —— 实测 13 个镜头只解析出 8 个。
 html = io.open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
+# ⚠ 不要用 json.loads(片段.replace("'", '"')) 解析字幕表 —— 两个必崩点：
+#   ① 数组尾逗号（`[...],\n];`，非常常见的写法）→ JSONDecodeError，
+#      整个验收脚本直接抛栈退出，任何尾逗号的工程都用不了；
+#   ② 文案里出现直引号时 replace("'", '"') 会把字符串截断。
+# 改成逐条正则取三元组，对两种引号、尾逗号、正文里的引号都免疫。
 m = re.search(r'const SUBS\s*=\s*(\[.*?\n\]);', html, re.S)
-subs = json.loads(m.group(1).replace("'", '"')) if m else []
+subs = []
+if m:
+    for sm in re.finditer(r'\[\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*(["\'])(.*?)\3\s*\]', m.group(1), re.S):
+        subs.append([float(sm.group(1)), float(sm.group(2)), sm.group(4)])
 
 shots = []
 shot_src = ''
@@ -130,24 +138,53 @@ try:
                 break
     if not node:
         raise RuntimeError('找不到 node —— 请设环境变量 NODE_BIN 指过去')
-    js = ("const p=require('puppeteer-core'),path=require('path');"
-          "(async()=>{const b=await p.launch({executablePath:process.env.CHROME_PATH,"
-          "headless:'new',userDataDir:path.join(require('os').tmpdir(), 'html-timeline-chrome-profile'),"
-          "args:['--no-sandbox','--allow-file-access-from-files','--disable-gpu']});"
-          "const g=await b.newPage();"
-          "await g.goto('file:///'+path.join(process.cwd(),'index.html').replace(/\\\\/g,'/'),{waitUntil:'load'});"
-          "await g.waitForFunction('typeof window.__render === \"function\"');"
-          "console.log(JSON.stringify(await g.evaluate('window.__shots.map(s=>[s.s,s.e])')));"
-          "await b.close();})();")
-    r = _sp.run([node, '-e', js], capture_output=True, text=True,
-                env=dict(os.environ, CHROME_PATH=os.environ.get(
-                    'CHROME_PATH', os.environ.get('CHROME_PATH') or os.path.join(
-                        os.environ.get('LOCALAPPDATA', ''),
-                        'Google', 'Chrome', 'Application', 'chrome.exe'))))
+    # ⚠ 用 `node -e` 传内联脚本要穿过 Python 转义 + shell 转义两层，
+    #   实测 `\\\\/g` 到 node 手里会变成 `/\/g` → 语法错误 → node 退出但 stdout 为空
+    #   → 不抛异常、静默拿到 0 个镜头。改成写临时 .cjs 文件再执行，绕开整类转义问题。
+    import tempfile
+    jsfile = os.path.join(tempfile.gettempdir(), 'html_timeline_dump_shots.cjs')
+    with io.open(jsfile, 'w', encoding='utf-8') as f:
+        f.write(
+            "const p=require('puppeteer-core'),path=require('path');\n"
+            "(async()=>{const b=await p.launch({executablePath:process.env.CHROME_PATH,headless:'new',\n"
+            "  userDataDir:path.join(require('os').tmpdir(),'html-timeline-dump-profile'),\n"
+            # ⚠ 用独立 profile 目录名：与 render.cjs 的 'html-timeline-chrome-profile' 共用的话，
+            #   渲染期间跑验收会直接报 "The browser is already running for ..."。
+            "  args:['--no-sandbox','--allow-file-access-from-files','--disable-gpu']});\n"
+            "const g=await b.newPage();\n"
+            "const url='file:///'+path.join(process.env.PROJ_ROOT||process.cwd(),'index.html').split(path.sep).join('/');\n"
+            "await g.goto(url,{waitUntil:'load'});\n"
+            "await g.waitForFunction('typeof window.__render === \"function\"');\n"
+            # 字段兼容：模板用 s.s/s.e，实测有工程用 s.st/s.et。只认一种会静默拿到 null。
+            "const d=await g.evaluate(()=>window.__shots.map(s=>[s.st!==undefined?s.st:s.s,s.et!==undefined?s.et:s.e]));\n"
+            "console.log(JSON.stringify(d));await b.close();\n"
+            "})().catch(e=>{console.error('DUMP_ERR '+e.message);process.exit(9);});\n")
+    # Chrome 路径回退链：本机 Chrome **不在** LOCALAPPDATA（那里是 AppData\\Local），
+    # 写死那一个路径会让 launch 直接失败。
+    chrome = os.environ.get('CHROME_PATH') or ''
+    if not chrome or not os.path.exists(chrome):
+        for c in [os.path.join(os.environ.get('PROGRAMFILES', 'C:/Program Files'),
+                               'Google', 'Chrome', 'Application', 'chrome.exe'),
+                  os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)'),
+                               'Google', 'Chrome', 'Application', 'chrome.exe'),
+                  os.path.join(os.environ.get('LOCALAPPDATA', ''),
+                               'Google', 'Chrome', 'Application', 'chrome.exe')]:
+            if os.path.exists(c):
+                chrome = c
+                break
+    r = _sp.run([node, jsfile], capture_output=True, text=True,
+                env=dict(os.environ, PROJ_ROOT=ROOT, CHROME_PATH=chrome))
     line = [l for l in r.stdout.strip().split('\n') if l.startswith('[')]
     if line:
         shots = [(float(a), float(b)) for a, b in json.loads(line[-1])]
         shot_src = 'window.__shots（页面实测，与渲染同一份数据）'
+    else:
+        # 「node 跑了但没输出」以前是完全静默的（不抛异常 → 不进 except → 0 镜头还报 ok）。
+        # 必须出声，并把 node 自己的 stderr 打出来。
+        print('  ⚠⚠ 取 __shots：node 没有输出镜头表（exit=%s）' % r.returncode)
+        if r.stderr.strip():
+            print('     node stderr: ' + r.stderr.strip().split('\n')[-1][:200])
+        print('     Chrome 路径用的是: %s' % (chrome or '(空)'))
 except Exception as e:
     # 降级必须**出声**。正则只匹配字面量数字的 add(S0,S1,...)，
     # 匹配不到 SCHOOLS.forEach 里生成的镜头 —— 实测 15 镜只解析出 10 个。
@@ -159,7 +196,19 @@ if not shots:
              re.findall(r'add\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,', html)]
     shot_src = '正则 add()（可能漏掉 forEach 里的镜头）'
 
+# ⚠ 硬守卫：镜头表为空 = 一个采样点都没有 = 什么都没验。
+#   没有这道守卫时脚本会吐出「最低 PSNR 999.00 dB」并 exit 0 —— 假绿灯比报错危险得多。
+if not shots:
+    print('✗ 镜头表为空（__shots 与正则都没取到）→ 没有任何采样点，无法验收，已中止。')
+    print('  别忽略这条：继续跑会输出 PSNR 999 dB 并报通过。')
+    print('  检查 window.__shots 是否存在、字段名是否为 st/et（或 s/e）。')
+    sys.exit(4)
+
 print('镜头 %d 个（来源：%s） / 字幕 %d 条' % (len(shots), shot_src, len(subs)))
+if not subs:
+    print('⚠ 没解析到字幕表 → 取样点会退回「镜头中点」。')
+    print('  按项目约定应取字幕中点（字幕中点才能保证那一帧有完整文字），')
+    print('  若 index.html 的 SUBS 写法与正则不符，请改这里的解析而不是忽略这条警告。')
 
 # 每个镜头取「落在本镜内、离中点最近」的那条字幕的中点
 T = []
