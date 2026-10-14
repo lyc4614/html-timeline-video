@@ -1,0 +1,215 @@
+/* ============================================================================
+   浅底彩卡族（paper cards）—— 第二条卡面路线  v1
+
+   与 card-system.css（深色卡）**并列**，不是替代。两者可以同时出现在一部片子里，
+   这正是它好看的原因：
+     深色卡 = 封面 / 章节卡 / 大数字 / 金句 / 片尾  → 稳、沉、有重量
+     浅底纸卡 = 正文卡片                        → 亮、跳、五彩，一张一色块
+   全片因此形成**明暗交替的节奏**；如果全片都换成浅底，反而会失去重点。
+
+   参考片（抖音精选竖版信息图）的层次感不是「往暗卡上刷颜色」，而是
+   **几张不同色相的浅底纸**：每张卡自己是一个完整色块，靠明度反差从暗场里跳出来。
+   往深色卡上叠彩色只会得到「脏」，把卡换成浅底纸才是「亮」。
+
+   四个变量描述一张纸，换一组变量 = 换一种纸：
+     --p1/--p2  卡面渐变两端（上浅下深，差值不要超过 12% 明度）
+     --pk       墨  —— 描边 / 纹样 / 正文
+     --pm       副文
+     --pa       强调 —— 图标 / 数字 / 色带 / 高亮词
+     --pi       内嵌细线（半透明版本，一般取 --pa 的 .38）
+
+   ⚠ 语义约定（一片之内必须一致，不能乱用，否则观众读不出规律）：
+     米      中性 · 叙述与结论
+     藕荷    标识 · 物理相关 / 第一章
+     秋香    标识 · 历史相关 / 第二章
+     竹青    正向 · 能报 / 可行 / 通过
+     浅绛    负向 · 不能报 / 受限 / 误区 / 痛点
+
+   ⚠ 依赖与顺序
+     · 本文件**依赖 card-system.css 的 .card 基础类**（圆角/padding/内嵌线/厚度语言），
+       只覆盖「卡面材质 + 文字配色」。单独引入时必须先引 card-system.css。
+     · 纹样是五色共用同一份金色 data URI，靠 mask 取 alpha 通道，
+       所以**不需要**为每个色相各生成一套换色图（早期方案就是那样，白白多 5 份资源）。
+     · 本文件自带的 --orn-div / --orn-scroll 与 card-system.css 里是**同一份 SVG**；
+       两者叠用时后引的覆盖前者，值相同，无副作用。
+   ============================================================================ */
+
+:root{
+  /* <<PCORN>> 纹样 URI：与 card-system.css 同源的金色图形。
+     本族只用它们的 **alpha 通道**（mask），颜色由 --pk 给 —— 所以浅底上呈现为墨色纹样。
+     用金色直接当 background-image 在浅底上看不见（这也是必须改 mask 的原因）。 */
+  --orn-c-tl:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%3E%3Cdefs%3E%3ClinearGradient%20id='goldG'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3E%20%3Cstop%20offset='0'%20stop-color='%23FFF8E2'/%3E%20%3Cstop%20offset='.36'%20stop-color='%23F2DA98'/%3E%20%3Cstop%20offset='.72'%20stop-color='%23C9A85E'/%3E%20%3Cstop%20offset='1'%20stop-color='%23F7E8BC'/%3E%20%3C/linearGradient%3E%3C/defs%3E%3Cg%20opacity='0.38'%3E%3Cg%20fill='none'%20stroke='url(%23goldG)'%20stroke-linecap='round'%3E%20%3Cpath%20d='M7%207%20C7%2024%2014%2038%2027%2046'%20stroke-width='2.2'/%3E%20%3Cpath%20d='M7%207%20C24%207%2038%2014%2046%2027'%20stroke-width='2.2'/%3E%20%3Cpath%20d='M13.5%2013.5%20C13.5%2025%2018.5%2035%2027%2040'%20stroke-width='1.4'%20opacity='.60'/%3E%20%3Cpath%20d='M13.5%2013.5%20C25%2013.5%2035%2018.5%2040%2027'%20stroke-width='1.4'%20opacity='.60'/%3E%20%3Cpath%20d='M27%2046%20C33.5%2050.5%2042%2046.5%2041%2038%20C40.2%2031.5%2032.5%2030.5%2029.8%2035.5%20C27.7%2039.4%2031%2043.5%2035.2%2041.8'%20stroke-width='1.9'/%3E%20%3Cpath%20d='M46%2027%20C50.5%2033.5%2046.5%2042%2038%2041%20C31.5%2040.2%2030.5%2032.5%2035.5%2029.8%20C39.4%2027.7%2043.5%2031%2041.8%2035.2'%20stroke-width='1.9'/%3E%20%3C/g%3E%20%3Ccircle%20cx='7'%20cy='7'%20r='2.6'%20fill='url(%23goldG)'/%3E%3C/g%3E%3C/svg%3E");
+  --orn-c-tr:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%3E%3Cdefs%3E%3ClinearGradient%20id='goldG'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3E%20%3Cstop%20offset='0'%20stop-color='%23FFF8E2'/%3E%20%3Cstop%20offset='.36'%20stop-color='%23F2DA98'/%3E%20%3Cstop%20offset='.72'%20stop-color='%23C9A85E'/%3E%20%3Cstop%20offset='1'%20stop-color='%23F7E8BC'/%3E%20%3C/linearGradient%3E%3C/defs%3E%3Cg%20opacity='0.38'%20transform='translate(64,0)%20scale(-1,1)'%3E%3Cg%20fill='none'%20stroke='url(%23goldG)'%20stroke-linecap='round'%3E%20%3Cpath%20d='M7%207%20C7%2024%2014%2038%2027%2046'%20stroke-width='2.2'/%3E%20%3Cpath%20d='M7%207%20C24%207%2038%2014%2046%2027'%20stroke-width='2.2'/%3E%20%3Cpath%20d='M13.5%2013.5%20C13.5%2025%2018.5%2035%2027%2040'%20stroke-width='1.4'%20opacity='.60'/%3E%20%3Cpath%20d='M13.5%2013.5%20C25%2013.5%2035%2018.5%2040%2027'%20stroke-width='1.4'%20opacity='.60'/%3E%20%3Cpath%20d='M27%2046%20C33.5%2050.5%2042%2046.5%2041%2038%20C40.2%2031.5%2032.5%2030.5%2029.8%2035.5%20C27.7%2039.4%2031%2043.5%2035.2%2041.8'%20stroke-width='1.9'/%3E%20%3Cpath%20d='M46%2027%20C50.5%2033.5%2046.5%2042%2038%2041%20C31.5%2040.2%2030.5%2032.5%2035.5%2029.8%20C39.4%2027.7%2043.5%2031%2041.8%2035.2'%20stroke-width='1.9'/%3E%20%3C/g%3E%20%3Ccircle%20cx='7'%20cy='7'%20r='2.6'%20fill='url(%23goldG)'/%3E%3C/g%3E%3C/svg%3E");
+  --orn-c-bl:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%3E%3Cdefs%3E%3ClinearGradient%20id='goldG'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3E%20%3Cstop%20offset='0'%20stop-color='%23FFF8E2'/%3E%20%3Cstop%20offset='.36'%20stop-color='%23F2DA98'/%3E%20%3Cstop%20offset='.72'%20stop-color='%23C9A85E'/%3E%20%3Cstop%20offset='1'%20stop-color='%23F7E8BC'/%3E%20%3C/linearGradient%3E%3C/defs%3E%3Cg%20opacity='0.38'%20transform='translate(0,64)%20scale(1,-1)'%3E%3Cg%20fill='none'%20stroke='url(%23goldG)'%20stroke-linecap='round'%3E%20%3Cpath%20d='M7%207%20C7%2024%2014%2038%2027%2046'%20stroke-width='2.2'/%3E%20%3Cpath%20d='M7%207%20C24%207%2038%2014%2046%2027'%20stroke-width='2.2'/%3E%20%3Cpath%20d='M13.5%2013.5%20C13.5%2025%2018.5%2035%2027%2040'%20stroke-width='1.4'%20opacity='.60'/%3E%20%3Cpath%20d='M13.5%2013.5%20C25%2013.5%2035%2018.5%2040%2027'%20stroke-width='1.4'%20opacity='.60'/%3E%20%3Cpath%20d='M27%2046%20C33.5%2050.5%2042%2046.5%2041%2038%20C40.2%2031.5%2032.5%2030.5%2029.8%2035.5%20C27.7%2039.4%2031%2043.5%2035.2%2041.8'%20stroke-width='1.9'/%3E%20%3Cpath%20d='M46%2027%20C50.5%2033.5%2046.5%2042%2038%2041%20C31.5%2040.2%2030.5%2032.5%2035.5%2029.8%20C39.4%2027.7%2043.5%2031%2041.8%2035.2'%20stroke-width='1.9'/%3E%20%3C/g%3E%20%3Ccircle%20cx='7'%20cy='7'%20r='2.6'%20fill='url(%23goldG)'/%3E%3C/g%3E%3C/svg%3E");
+  --orn-c-br:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%3E%3Cdefs%3E%3ClinearGradient%20id='goldG'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3E%20%3Cstop%20offset='0'%20stop-color='%23FFF8E2'/%3E%20%3Cstop%20offset='.36'%20stop-color='%23F2DA98'/%3E%20%3Cstop%20offset='.72'%20stop-color='%23C9A85E'/%3E%20%3Cstop%20offset='1'%20stop-color='%23F7E8BC'/%3E%20%3C/linearGradient%3E%3C/defs%3E%3Cg%20opacity='0.38'%20transform='translate(64,64)%20scale(-1,-1)'%3E%3Cg%20fill='none'%20stroke='url(%23goldG)'%20stroke-linecap='round'%3E%20%3Cpath%20d='M7%207%20C7%2024%2014%2038%2027%2046'%20stroke-width='2.2'/%3E%20%3Cpath%20d='M7%207%20C24%207%2038%2014%2046%2027'%20stroke-width='2.2'/%3E%20%3Cpath%20d='M13.5%2013.5%20C13.5%2025%2018.5%2035%2027%2040'%20stroke-width='1.4'%20opacity='.60'/%3E%20%3Cpath%20d='M13.5%2013.5%20C25%2013.5%2035%2018.5%2040%2027'%20stroke-width='1.4'%20opacity='.60'/%3E%20%3Cpath%20d='M27%2046%20C33.5%2050.5%2042%2046.5%2041%2038%20C40.2%2031.5%2032.5%2030.5%2029.8%2035.5%20C27.7%2039.4%2031%2043.5%2035.2%2041.8'%20stroke-width='1.9'/%3E%20%3Cpath%20d='M46%2027%20C50.5%2033.5%2046.5%2042%2038%2041%20C31.5%2040.2%2030.5%2032.5%2035.5%2029.8%20C39.4%2027.7%2043.5%2031%2041.8%2035.2'%20stroke-width='1.9'/%3E%20%3C/g%3E%20%3Ccircle%20cx='7'%20cy='7'%20r='2.6'%20fill='url(%23goldG)'/%3E%3C/g%3E%3C/svg%3E");
+  --orn-div:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='620'%20height='34'%20viewBox='0%200%20620%2034'%3E%3Cg%20fill='none'%3E%3Cpath%20d='M4%2017.0%20H218.2'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M12%2013.4%20L15.6%2017.0%20L12%2020.6%20L8.4%2017.0%20Z'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='0.8'/%3E%3Cpath%20d='M218.2%2017.0%20C232.2%2017.0%20243.4%2015.0%20255.4%2013.0'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M255.4%2013.0%20A9.0%209.0%200%200%201%20256.7%209.9%20A8.3%208.3%200%200%201%20258.9%207.6%20A7.7%207.7%200%200%201%20261.5%206.5%20A7.1%207.1%200%200%201%20264.2%206.4%20A6.6%206.6%200%200%201%20266.5%207.3%20A6.1%206.1%200%200%201%20268.2%208.8%20A5.7%205.7%200%200%201%20269.1%2010.7%20A5.2%205.2%200%200%201%20269.3%2012.7%20A4.9%204.9%200%200%201%20268.7%2014.4%20A4.5%204.5%200%200%201%20267.6%2015.7%20A4.2%204.2%200%200%201%20266.2%2016.4'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Ccircle%20cx='280.2'%20cy='9.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Ccircle%20cx='285.2'%20cy='25.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Cpath%20d='M310.0%206.0%20L299.0%2017.0%20L310.0%2028.0'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linejoin='round'/%3E%3C/g%3E%3Cg%20fill='none'%20transform='translate(620,0)%20scale(-1,1)'%3E%3Cpath%20d='M4%2017.0%20H218.2'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M12%2013.4%20L15.6%2017.0%20L12%2020.6%20L8.4%2017.0%20Z'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='0.8'/%3E%3Cpath%20d='M218.2%2017.0%20C232.2%2017.0%20243.4%2015.0%20255.4%2013.0'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M255.4%2013.0%20A9.0%209.0%200%200%201%20256.7%209.9%20A8.3%208.3%200%200%201%20258.9%207.6%20A7.7%207.7%200%200%201%20261.5%206.5%20A7.1%207.1%200%200%201%20264.2%206.4%20A6.6%206.6%200%200%201%20266.5%207.3%20A6.1%206.1%200%200%201%20268.2%208.8%20A5.7%205.7%200%200%201%20269.1%2010.7%20A5.2%205.2%200%200%201%20269.3%2012.7%20A4.9%204.9%200%200%201%20268.7%2014.4%20A4.5%204.5%200%200%201%20267.6%2015.7%20A4.2%204.2%200%200%201%20266.2%2016.4'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Ccircle%20cx='280.2'%20cy='9.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Ccircle%20cx='285.2'%20cy='25.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Cpath%20d='M310.0%206.0%20L299.0%2017.0%20L310.0%2028.0'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E");
+  --orn-scroll:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='240'%20height='40'%20viewBox='0%200%20240%2040'%3E%3Cg%20transform='translate(0,40)%20scale(1,-1)'%3E%3Cg%20fill='none'%3E%3Cpath%20d='M4%2020.0%20H84.5'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M12%2016.4%20L15.6%2020.0%20L12%2023.6%20L8.4%2020.0%20Z'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='0.8'/%3E%3Cpath%20d='M84.5%2020.0%20C98.5%2020.0%2081.6%2018.0%2093.6%2016.0'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M93.6%2016.0%20A9.0%209.0%200%200%201%2094.9%2012.9%20A8.3%208.3%200%200%201%2097.1%2010.6%20A7.7%207.7%200%200%201%2099.7%209.5%20A7.1%207.1%200%200%201%20102.4%209.4%20A6.6%206.6%200%200%201%20104.7%2010.3%20A6.1%206.1%200%200%201%20106.4%2011.8%20A5.7%205.7%200%200%201%20107.3%2013.7%20A5.2%205.2%200%200%201%20107.4%2015.7%20A4.9%204.9%200%200%201%20106.9%2017.4%20A4.5%204.5%200%200%201%20105.8%2018.7%20A4.2%204.2%200%200%201%20104.4%2019.4'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M73.6%2017.5%20C74.8%207.3%2066.0%203.4%2065.1%203.9%20C64.3%204.5%2063.9%2014.1%2073.6%2017.5%20Z'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='0.8'/%3E%3Cpath%20d='M84.6%2023.5%20C77.5%2026.5%2078.3%2033.7%2079.0%2034.1%20C79.6%2034.5%2086.0%2031.1%2084.6%2023.5%20Z'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='0.8'/%3E%3Ccircle%20cx='123.6'%20cy='11.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Ccircle%20cx='108.5'%20cy='12.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Ccircle%20cx='110.4'%20cy='28.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Cpath%20d='M120.0%2011.0%20L111.0%2020.0%20L120.0%2029.0'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linejoin='round'/%3E%3C/g%3E%3Cg%20fill='none'%20transform='translate(240,0)%20scale(-1,1)'%3E%3Cpath%20d='M4%2020.0%20H84.5'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M12%2016.4%20L15.6%2020.0%20L12%2023.6%20L8.4%2020.0%20Z'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='0.8'/%3E%3Cpath%20d='M84.5%2020.0%20C98.5%2020.0%2081.6%2018.0%2093.6%2016.0'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M93.6%2016.0%20A9.0%209.0%200%200%201%2094.9%2012.9%20A8.3%208.3%200%200%201%2097.1%2010.6%20A7.7%207.7%200%200%201%2099.7%209.5%20A7.1%207.1%200%200%201%20102.4%209.4%20A6.6%206.6%200%200%201%20104.7%2010.3%20A6.1%206.1%200%200%201%20106.4%2011.8%20A5.7%205.7%200%200%201%20107.3%2013.7%20A5.2%205.2%200%200%201%20107.4%2015.7%20A4.9%204.9%200%200%201%20106.9%2017.4%20A4.5%204.5%200%200%201%20105.8%2018.7%20A4.2%204.2%200%200%201%20104.4%2019.4'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linecap='round'/%3E%3Cpath%20d='M73.6%2017.5%20C74.8%207.3%2066.0%203.4%2065.1%203.9%20C64.3%204.5%2063.9%2014.1%2073.6%2017.5%20Z'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='0.8'/%3E%3Cpath%20d='M84.6%2023.5%20C77.5%2026.5%2078.3%2033.7%2079.0%2034.1%20C79.6%2034.5%2086.0%2031.1%2084.6%2023.5%20Z'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='0.8'/%3E%3Ccircle%20cx='123.6'%20cy='11.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Ccircle%20cx='108.5'%20cy='12.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Ccircle%20cx='110.4'%20cy='28.0'%20r='1.6'%20fill='%23E8D9A8'%20stroke='none'/%3E%3Cpath%20d='M120.0%2011.0%20L111.0%2020.0%20L120.0%2029.0'%20fill='none'%20stroke='%23E8D9A8'%20stroke-width='1.15'%20stroke-linejoin='round'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  /* 墨线版颗粒：深色卡用金色颗粒(--orn-grain)，浅底卡必须换成墨色，
+     否则金尘落在米纸上会糊成一片白噪点。由金色版派生（只换 feColorMatrix 的 RGB）。 */
+  --orn-grain-i:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%3E%3Cfilter%20id='g'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.8'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200.38%20%200%200%200%200.31%20%200%200%200%200.18%20%200%200%200%200.45%200'/%3E%3CfeComponentTransfer%3E%3CfeFuncA%20type='discrete'%20tableValues='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200.5'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='150'%20height='150'%20filter='url(%23g)'/%3E%3C/svg%3E");
+  /* <<PCORN-END>> */
+}
+
+/* ---------- 五种色相：一个色相 = 一张纸 ---------- */
+.pc{--p1:#F9F3E6;--p2:#E1D7C0;--pk:#241E14;--pm:#4A4034;--pa:#8A6526;--pi:rgba(146,116,56,.40);}
+.hue-lian {--p1:#E9EDF8;--p2:#D6DCF0;--pk:#2B3252;--pm:#565E86;--pa:#4A5590;--pi:rgba(74,85,144,.38);}
+.hue-he   {--p1:#F4F7E2;--p2:#E2E8C8;--pk:#38421E;--pm:#656E3D;--pa:#67752B;--pi:rgba(103,117,43,.38);}
+.hue-zhu  {--p1:#E5F1E8;--p2:#CFE4D8;--pk:#1E442D;--pm:#4B7460;--pa:#37704E;--pi:rgba(55,112,78,.38);}
+.hue-jiang{--p1:#FBEBE2;--p2:#F2D6C8;--pk:#682E20;--pm:#945944;--pa:#B2543A;--pi:rgba(178,84,58,.38);}
+
+/* ---------- 卡面：纸的质感 ----------
+   六层叠加（从上到下），顺序不能乱：
+     ① 墨色颗粒  ②③ 两向斜纹（纸纹）  ④ 顶部受光  ⑤ 边缘压暗  ⑥ 本色渐变
+   浅底卡比深色卡更怕「平」——深色卡平了是闷，浅底卡平了就是一张 PPT 色块。 */
+.card.pc{
+  background-color:var(--p1);color:var(--pk);overflow:hidden;
+  background-image:
+    var(--orn-grain-i),
+    repeating-linear-gradient(45deg,rgba(96,74,34,.045) 0 1px,transparent 1px 5px),
+    repeating-linear-gradient(-45deg,rgba(96,74,34,.030) 0 1px,transparent 1px 5px),
+    radial-gradient(122% 90% at 50% 2%,rgba(255,255,255,.66) 0%,rgba(255,255,255,0) 62%),
+    radial-gradient(140% 120% at 50% 56%,rgba(255,255,255,0) 48%,rgba(96,74,34,.15) 100%),
+    linear-gradient(168deg,var(--p1) 0%,var(--p2) 100%);
+  border:1px solid var(--pi);
+  /* 浅底卡在暗场里要「浮起来」，靠三件事，缺一个都塌：
+     ① 一圈纯黑 0 0 0 1px  —— 把纸和背景切开（否则纸边会被背景吃掉）
+     ② 右下硬边厚度（三层递减）—— 纸的厚度，这是「纸」而不是「色块」的关键
+     ③ 双层外投影 + 环境金色辉光 —— 离开背景 */
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,.74),
+    0 0 48px rgba(226,203,138,.20),
+    6px 7px 0 0 rgba(126,100,46,.46),
+    7px 8px 0 0 #0B0A08,
+    12px 14px 0 0 rgba(0,0,0,.86),
+    0 18px 38px rgba(0,0,0,.64),
+    0 38px 86px rgba(0,0,0,.54),
+    inset 0 0 0 1px rgba(255,255,255,.34),
+    inset 0 1px 0 rgba(255,255,255,.94),
+    inset 0 -4px 18px rgba(96,74,34,.18);}
+
+/* ---------- 纹样：改 mask，五色共用一份 SVG ----------
+   mask 取的是 SVG 的 alpha 通道，与它原本是什么颜色**无关**。
+   所以同一份金色纹样，只要把 background-color 换成 var(--pk)，
+   在米纸上就是墨纹、在竹青纸上就是深绿纹 —— 一次编写，五色通用。
+   （早期方案给每个色相各生成一套换色 SVG，多 5 份资源且改一处要改五处。）
+   金色 data URI 里自带 opacity .38，所以这里不再叠 opacity。 */
+.card.pc::before{
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background-color:var(--pk);background-image:none;
+  -webkit-mask-image:var(--orn-c-tl),var(--orn-c-tr),var(--orn-c-bl),var(--orn-c-br),var(--orn-div),var(--orn-scroll);
+          mask-image:var(--orn-c-tl),var(--orn-c-tr),var(--orn-c-bl),var(--orn-c-br),var(--orn-div),var(--orn-scroll);
+  -webkit-mask-size:46px 46px,46px 46px,46px 46px,46px 46px,620px 34px,240px 36px;
+          mask-size:46px 46px,46px 46px,46px 46px,46px 46px,620px 34px,240px 36px;
+  -webkit-mask-position:14px 12px,calc(100% - 14px) 12px,14px calc(100% - 12px),calc(100% - 14px) calc(100% - 12px),center 11px,center calc(100% - 9px);
+          mask-position:14px 12px,calc(100% - 14px) 12px,14px calc(100% - 12px),calc(100% - 14px) calc(100% - 12px),center 11px,center calc(100% - 9px);
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;}
+/* 矮卡/窄卡装不下纹样就不画 —— 但内嵌线保留，边框语言要统一 */
+.card.pc.plain::before{content:none;}
+.card.pc::after{border-color:var(--pi);}
+/* .sm 档：纹样同步缩一档，位置内缩量也要跟着缩（只改 size 不改 position 会顶到边上） */
+.card.pc.sm::before{
+  -webkit-mask-size:38px 38px,38px 38px,38px 38px,38px 38px,420px 26px,168px 30px;
+          mask-size:38px 38px,38px 38px,38px 38px,38px 38px,420px 26px,168px 30px;
+  -webkit-mask-position:10px 8px,calc(100% - 10px) 8px,10px calc(100% - 8px),calc(100% - 10px) calc(100% - 8px),center 8px,center calc(100% - 7px);
+          mask-position:10px 8px,calc(100% - 10px) 8px,10px calc(100% - 8px),calc(100% - 10px) calc(100% - 8px),center 8px,center calc(100% - 7px);}
+
+/* ============================================================
+   卡内文字自动适配浅底 —— 目标是「HTML 里的字一个都不用改」
+
+   正片里所有文字颜色都是内联写死的（那是为深色卡调的：金色 #F2E0A0、
+   近白 rgba(245,241,232,.80)…），一共 20 种取值。
+   把它们换成浅底可读的颜色，有两条路：
+     ✗ 枚举法：列出所有见过的金色值，逐个覆盖。
+        —— 一定会漏。实测就漏掉了 rgba(245,241,232,.80)，
+           预算里的「化学不是『可选项』」整行在浅底上隐形，而抽帧不抽到那一秒就发现不了。
+     ✓ 兜底法：把所有带内联 color 的元素一律压成 --pm，再单独把该突出的挑回来。
+   ============================================================ */
+.card.pc .md,.card.pc .qt,.card.pc .vt,.card.pc .stt,.card.pc .pt2,
+.card.pc .tt,.card.pc .ct,.card.pc .av,.card.pc .cl{color:var(--pk);}
+.card.pc .sm,.card.pc .xs,.card.pc .vli,.card.pc .ps,.card.pc .sdd,
+.card.pc .qd,.card.pc .ak,.card.pc .pdd,.card.pc .cs{color:var(--pm);}
+
+/* 金色渐变字在浅底上没有立足之地：拆掉 background-clip 回到实色
+   （background-clip:text 的白描边效果只在暗底上成立，浅底上会整行发灰） */
+.card.pc .gold,.card.pc .goldnum,.card.pc .np{
+  background:none;-webkit-text-fill-color:currentColor;filter:none;color:var(--pa);}
+.card.pc .goldnum,.card.pc .np{color:var(--pk);}
+
+/* 兜底：浅底卡里**任何**内联字色都失效。
+   作者 !important 在层叠顺序里高于内联声明，所以这一条压得住 style="color:…" ——
+   这是唯一能不动 HTML 就盖掉内联色的办法（内联声明本身是最高优先，除了 !important）。 */
+.card.pc [style*="color:"]{color:var(--pm)!important;}
+/* 高亮词（<b>）用强调色；**必须写在兜底之后**，否则会被上面的 !important 压成副文色 */
+.card.pc b{color:var(--pa)!important;}
+
+/* ---------- 卡内既有控件换到浅底语言 ---------- */
+.card.pc .mch{color:var(--pa);}
+.card.pc .divline{background:linear-gradient(90deg,transparent,var(--pi),transparent);}
+.card.pc .tagh{color:var(--pm);border-color:var(--pi);}
+.card.pc .mrow i{color:var(--pk);border-color:var(--pi);background:rgba(255,255,255,.55);}
+/* flex:0 0 auto 不能省：chip 在 flex 行里被压缩后会折成两行（实测「基础尚可」折了） */
+.card.pc .chip{color:var(--pk);border-color:var(--pi);background:rgba(255,255,255,.55);flex:0 0 auto;}
+.card.pc .chip.on{color:#FFFFFF;background:linear-gradient(180deg,var(--pa),var(--pk));border-color:transparent;}
+/* 数字牌 → 浅底玻璃牌 */
+.card.pc .numplate{background:linear-gradient(158deg,rgba(255,255,255,.94),rgba(255,255,255,.46));
+  border-color:var(--pa);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.98),0 4px 12px rgba(46,32,10,.20);}
+/* 进度条：金色渐变在浅底上不成立，换成这张纸的强调色 */
+.card.pc .ct2{background:rgba(90,70,30,.15);}
+.card.pc .cf{background:linear-gradient(90deg,var(--pa),var(--pk));}
+.card.pc .cv2{color:var(--pm);}
+
+/* ---------- 窄卡的字号补偿（改成浅底后墨色比金色更「重」，同样的字更占宽） ----------
+   这两条都是实测折行后补的，换成别的文案不一定还需要 —— 是**档位**不是定律 */
+.card.pc.p3 .ps{font-size:23px;letter-spacing:0;}      /* 3+1+2 三张窄卡：「统一高考 · 全部必考」原字号折两行 */
+.card.pc.side .vt{font-size:38px;}                     /* 侧栏对照卡：「物理类招生计划多」原字号挤成 4 行 */
+
+/* ---------- 图标（取自 icon-library.js 的线性 24×24，一图标一义，绝不装饰性使用） ----------
+   .card.pc .ico        白玻璃底 + 色线 —— 轻，做行首标记
+   .card.pc .ico.solid  实色底 + 白线   —— 重，做卡的主视觉
+
+   ⚠ 必须**收进 .card.pc 作用域**，不要写成全局 .ico。
+     深色卡路线（card-system.css）也用 .ico，而且是另一套外观（暗金底 + 44px）。
+     写成全局类会在「同一页同时摆两种卡」的实验台里互相覆盖 ——
+     后加载的那份赢，而且**哪里被覆盖了完全看不出来**（图标变小 / 变色，但布局不报错）。
+     图标颜色全部来自 var(--pa)/var(--pk)，本来就是跟着纸走的，收进作用域才是正确归属。
+
+   同一个图标在同一张卡里不要出现两次；图标只加信息，不做平衡构图用。 */
+.card.pc .ico{display:flex;align-items:center;justify-content:center;flex:0 0 auto;position:relative;
+  border-radius:22px;
+  background:linear-gradient(158deg,rgba(255,255,255,.94) 0%,rgba(255,255,255,.44) 100%);
+  border:2px solid var(--pa);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.98),0 4px 12px rgba(46,32,10,.20);}
+.card.pc .ico svg{stroke:var(--pa);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+.card.pc .ico.s{width:56px;height:56px;border-radius:16px;} .card.pc .ico.s svg{width:30px;height:30px;}
+.card.pc .ico.m{width:84px;height:84px;} .card.pc .ico.m svg{width:46px;height:46px;}
+.card.pc .ico.l{width:112px;height:112px;border-radius:28px;} .card.pc .ico.l svg{width:62px;height:62px;}
+.card.pc .ico.solid{background:linear-gradient(158deg,var(--pa),var(--pk));
+  border-color:rgba(255,255,255,.52);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.40),0 5px 14px rgba(30,20,6,.34);}
+.card.pc .ico.solid svg{stroke:#FFFFFF;stroke-width:2.1;}
+
+/* ---------- 底部色带（学参考片：色块 + 反白字，做「并列项」的分段条） ---------- */
+.rb{flex:1;height:76px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+  color:#FFFFFF;font-size:30px;font-weight:900;letter-spacing:3px;
+  background:linear-gradient(158deg,var(--pa),var(--pk));
+  box-shadow:0 8px 20px rgba(0,0,0,.50),inset 0 1px 0 rgba(255,255,255,.32);}
+
+/* ============================================================
+   右上角品牌位
+
+   logo 放右上角顺带解开了「左上章节标签 vs 品牌」的几何死结：
+   章节标签 .hd 占 x[70,410]、品牌占 x[666,1010]，中间留 256px ——
+   章节标签保持原尺寸，不必为腾地方而缩号。
+   （量法：shot_page.cjs 读 getBoundingClientRect，不要目测。）
+   ============================================================ */
+.brand{position:absolute;right:70px;top:84px;z-index:40;display:flex;align-items:center;}
+.brand .plate{padding:19px 30px;border-radius:24px;
+  background:linear-gradient(168deg,#FBF6EA 0%,#EFE7D4 52%,#E1D7C3 100%);
+  border:1px solid rgba(146,116,56,.52);
+  box-shadow:0 0 0 1px rgba(0,0,0,.72),0 0 36px rgba(226,203,138,.16),
+    4px 5px 0 0 rgba(126,100,46,.40),5px 6px 0 0 rgba(0,0,0,.55),
+    0 12px 26px rgba(0,0,0,.52),inset 0 1px 0 rgba(255,255,255,.92);}
+/* 浅底铭牌配深色字 logo（logo-wordmark-dark.png）；暗底用 light 版。
+   品牌资产的价值在识别，不改色 —— 冲突时改卡面底色，不是改 logo。 */
+.brand .plate img{display:block;width:282px;height:auto;}

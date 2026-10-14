@@ -6,6 +6,7 @@
 <!-- 与正片同源：index.html 内联的就是这份 card-system.css。
      改一处两边同时变 —— 实验台不是「另做一套」，它就是正片的样式。 -->
 <link rel="stylesheet" href="card-system.css">
+<link rel="stylesheet" href="paper-cards.css">
 <style>
   body{margin:0;width:1080px;background:#0B0B0D;color:#EDE7DA;
     font-family:"Source Han Serif SC","SrcSerifSC","Noto Serif SC",serif;
@@ -48,6 +49,21 @@
 
   <h2>5 · 典型卡片组合（图标 + 标题 + 副标题 / 瓦片双卡）</h2>
   <div class="stack" id="s5"></div>
+
+  <h2>6 · 浅底彩卡族（paper-cards.css）：一个色相 = 一张纸</h2>
+  <p class="hint">与深色卡<strong>并列</strong>的第二条卡面路线 —— 不是替代。深色卡给封面/章节/金句（稳、沉、有重量），
+     浅底纸卡给正文（亮、跳、一张一色块）。全片靠<strong>明暗交替</strong>形成节奏；<strong>全换成浅底反而没有重点</strong>。<br>
+     纹样用 <code>mask</code> 取金色 SVG 的 <strong>alpha 通道</strong>，颜色交给 <code>--pk</code>：
+     一份 SVG 同时服务五个色相，不必为每色各生成一套换色图。<br>
+     语义约定全片一致：<code>米</code> 中性叙述 · <code>hue-lian</code> 藕荷=物理/第一章 ·
+     <code>hue-he</code> 秋香=历史/第二章 · <code>hue-zhu</code> 竹青=能报/可行 · <code>hue-jiang</code> 浅绛=不能报/受限/误区。</p>
+  <div class="stack" id="s6"></div>
+
+  <h2>7 · 纸卡内的既有控件</h2>
+  <p class="hint">图标两档：<code>.ico</code> 白玻璃底 + 色线（轻，行首标记）／<code>.ico.solid</code> 实底 + 白线（重，主视觉）。
+     底部色带 <code>.rb</code> 做「并列项」的分段条。品牌铭牌 <code>.brand</code> 在页面右上角（常驻层，不放进卡里）。</p>
+  <div class="stack" id="s7"></div>
+  <div class="duo" id="s7b" style="margin-top:26px;"></div>
 
 </div>
 
@@ -111,8 +127,8 @@ document.getElementById('s4').innerHTML =
   shell('rrow', rowCard('chart','up','示例排行项 · 两行','副标题一行说明，第二行补充上下文'));
 
 document.getElementById('s5').innerHTML =
-  shell('card s-tu', rowCard('users','up','示例卡 · 结论型','左侧图标 + 结论句；语义红＝风险/竞争') +
-  shell('card s-gold', rowCard('doc','wr','示例卡 · 行动型','语义金＝结论/行动/品牌',)) +
+  shell('card s-tu', rowCard('users','up','示例卡 · 结论型','左侧图标 + 结论句；语义红＝风险/竞争')) +
+  shell('card s-gold', rowCard('doc','wr','示例卡 · 行动型','语义金＝结论/行动/品牌')) +
   shell('card s-gold', rowCard('flag','wr','示例卡 · 长文案','文案偏长时卡会变高，注意别把整屏撑出安全区')) +
   `<div class="duo">
      ${shell('card sm s-tu', `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:6px 0;">
@@ -123,6 +139,54 @@ document.getElementById('s5').innerHTML =
         <div class="ico wr" style="width:62px;height:62px;border-radius:18px;"><svg viewBox="0 0 24 24" fill="none" style="width:34px;height:34px;stroke:#FFD79A;">${ICON.bulb}</svg></div>
         <div style="font-size:52px;font-weight:900;color:#FFD79A;line-height:1.2;">指标 B</div>
         <div class="lb" style="font-size:23px;">小字标签</div></div>`)}
+   </div>`;
+
+/* ---------- 浅底彩卡族 ----------
+   注意：卡内文字**不写内联 color**，靠继承 .card.pc{color:var(--pk)}。
+   真写了内联色，也会被 .card.pc [style*="color:"] 兜底压成 --pm —— 那正是设计意图：
+   正片里 20 种为深色卡调的内联字色，一个都不用改。 */
+const pico = (n, cls) => `<div class="ico ${cls || 'm'}"><svg viewBox="0 0 24 24">${ICON[n] || ''}</svg></div>`;
+const pcard = (hue, ic, cls, title, sub) => `
+  <div class="card pc ${hue}">
+    <div style="display:flex;align-items:center;gap:26px;">
+      ${pico(ic, cls)}
+      <div style="min-width:0;">
+        <div style="font-size:34px;font-weight:900;line-height:1.3;">${title}</div>
+        <div class="sm" style="font-size:25px;margin-top:8px;line-height:1.5;">${sub}</div>
+      </div>
+    </div>
+  </div>`;
+
+document.getElementById('s6').innerHTML =
+  pcard('',         'bulb',   'm', '米 · 中性叙述与结论',  '--p1 #F9F3E6 → --p2 #E1D7C0，墨 --pk #241E14') +
+  pcard('hue-lian', 'target', 'm', '藕荷 · 物理 / 第一章', '冷紫纸：标识「属于哪一类」，不做正负判断') +
+  pcard('hue-he',   'doc',    'm', '秋香 · 历史 / 第二章', '黄绿纸：与藕荷成对出现，一眼分清两个轨道') +
+  pcard('hue-zhu',  'trend',  'm', '竹青 · 能报 / 可行',   '正向纸：能报、通过、优势、推荐') +
+  pcard('hue-jiang','warn',   'm', '浅绛 · 不能报 / 受限', '负向纸：不能报、受限、误区、痛点');
+
+document.getElementById('s7').innerHTML =
+  pcard('hue-zhu', 'flag', 'solid', '实底图标（.ico.solid）', '同一图标在同一张卡里不出现两次；图标只加信息，不做平衡构图') +
+  `<div class="card pc hue-he">
+     <div style="display:flex;gap:16px;">
+       <div class="rb">第一段</div>
+       <div class="rb" style="opacity:.78;">第二段</div>
+       <div class="rb" style="opacity:.56;">第三段</div>
+     </div>
+     <div class="sm" style="font-size:23px;margin-top:16px;">底部色带 .rb：色块 + 反白字，做并列项的分段条</div>
+   </div>`;
+
+document.getElementById('s7b').innerHTML =
+  `<div class="card pc sm hue-lian" style="flex:1;min-width:0;">
+     <div style="text-align:center;">
+       <div style="font-size:56px;font-weight:900;line-height:1.1;">物理类</div>
+       <div class="sm" style="font-size:23px;margin-top:10px;">.sm 档 · 纹样同步缩一档</div>
+     </div>
+   </div>
+   <div class="card pc sm hue-he" style="flex:1;min-width:0;">
+     <div style="text-align:center;">
+       <div style="font-size:56px;font-weight:900;line-height:1.1;">历史类</div>
+       <div class="sm" style="font-size:23px;margin-top:10px;">两张窄卡并排：色相即语义</div>
+     </div>
    </div>`;
 
 window.__ready = true;
