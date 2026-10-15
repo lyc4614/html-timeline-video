@@ -87,28 +87,48 @@
     inset 0 1px 0 rgba(255,255,255,.94),
     inset 0 -4px 18px rgba(96,74,34,.18);}
 
-/* ---------- 纹样：改 mask，五色共用一份 SVG ----------
-   mask 取的是 SVG 的 alpha 通道，与它原本是什么颜色**无关**。
-   所以同一份金色纹样，只要把 background-color 换成 var(--pk)，
+/* ---------- 纹样：只留顶部分隔线（默认密度）----------
+   判据比写法重要 —— 减负时分三类，别凭手感：
+     · 顶部分隔线：有**功能**（把「标题带」与「内容带」分开，读着有结构）   → 留
+     · 四角花纹、底部卷草：**纯装饰**，且四处同时出现最显花                 → 去
+   原版是 6 层（四角 ×4 + 顶花饰 + 底卷草），用户反馈「四周花纹太多，显花哨」。
+   4 张卡并排时 6 层纹样 = 16~24 处装饰，是「花哨」的直接来源。
+
+   仍然用 mask：mask 取的是 SVG 的 alpha 通道，与它原本是什么颜色无关，
+   所以同一份金色纹样，把 background-color 换成 var(--pk)，
    在米纸上就是墨纹、在竹青纸上就是深绿纹 —— 一次编写，五色通用。
-   （早期方案给每个色相各生成一套换色 SVG，多 5 份资源且改一处要改五处。）
-   金色 data URI 里自带 opacity .38，所以这里不再叠 opacity。 */
+   （早期方案给每个色相各生成一套换色 SVG，多 5 份资源且改一处要改五处。） */
 .card.pc::before{
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
   background-color:var(--pk);background-image:none;
-  -webkit-mask-image:var(--orn-c-tl),var(--orn-c-tr),var(--orn-c-bl),var(--orn-c-br),var(--orn-div),var(--orn-scroll);
-          mask-image:var(--orn-c-tl),var(--orn-c-tr),var(--orn-c-bl),var(--orn-c-br),var(--orn-div),var(--orn-scroll);
-  -webkit-mask-size:46px 46px,46px 46px,46px 46px,46px 46px,620px 34px,240px 36px;
-          mask-size:46px 46px,46px 46px,46px 46px,46px 46px,620px 34px,240px 36px;
-  -webkit-mask-position:14px 12px,calc(100% - 14px) 12px,14px calc(100% - 12px),calc(100% - 14px) calc(100% - 12px),center 11px,center calc(100% - 9px);
-          mask-position:14px 12px,calc(100% - 14px) 12px,14px calc(100% - 12px),calc(100% - 14px) calc(100% - 12px),center 11px,center calc(100% - 9px);
+  -webkit-mask-image:var(--orn-div);mask-image:var(--orn-div);
+  -webkit-mask-size:620px 34px;mask-size:620px 34px;
+  -webkit-mask-position:center 11px;mask-position:center 11px;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;}
 /* 矮卡/窄卡装不下纹样就不画 —— 但内嵌线保留，边框语言要统一 */
 .card.pc.plain::before{content:none;}
 .card.pc::after{border-color:var(--pi);}
-/* .sm 档：纹样同步缩一档，位置内缩量也要跟着缩（只改 size 不改 position 会顶到边上） */
+/* .sm 档：纹样同步缩一档。若想连顶线也去掉，两处都加 content:none 即可
+   （原版 .card.pc.plain 就是这么做的，保留这个档位给「全无纹样」用） */
 .card.pc.sm::before{
-  -webkit-mask-size:38px 38px,38px 38px,38px 38px,38px 38px,420px 26px,168px 30px;
+  -webkit-mask-size:420px 26px;mask-size:420px 26px;
+  -webkit-mask-position:center 8px;mask-position:center 8px;}
+
+/* ---------- 四角花纹：默认关闭，按需开 ----------
+   上面的默认密度是「只留顶线」。如果某个镜头确实需要四角点缀，
+   **局部打开**，别去改默认值：
+     <div class="card pc hue-zhu ornate">…</div>
+   打开后仍走 mask + --pk，五色共用同一份 SVG。
+   打开时记得核对 padding：内容边距 P 要 ≥ 角花深入量（O+F）+ 6，
+   否则角花会压内容（probe_card.cjs 能量）。 */
+.card.pc.ornate::before{
+  -webkit-mask-image:var(--orn-c-tl),var(--orn-c-tr),var(--orn-c-bl),var(--orn-c-br),var(--orn-div);
+          mask-image:var(--orn-c-tl),var(--orn-c-tr),var(--orn-c-bl),var(--orn-c-br),var(--orn-div);
+  -webkit-mask-size:30px 30px,30px 30px,30px 30px,30px 30px,620px 34px;
+          mask-size:30px 30px,30px 30px,30px 30px,30px 30px,620px 34px;
+  -webkit-mask-position:16px 14px,calc(100% - 16px) 14px,16px calc(100% - 14px),calc(100% - 16px) calc(100% - 14px),center 11px;
+          mask-position:16px 14px,calc(100% - 16px) 14px,16px calc(100% - 14px),calc(100% - 16px) calc(100% - 14px),center 11px;}
+
           mask-size:38px 38px,38px 38px,38px 38px,38px 38px,420px 26px,168px 30px;
   -webkit-mask-position:10px 8px,calc(100% - 10px) 8px,10px calc(100% - 8px),calc(100% - 10px) calc(100% - 8px),center 8px,center calc(100% - 7px);
           mask-position:10px 8px,calc(100% - 10px) 8px,10px calc(100% - 8px),calc(100% - 10px) calc(100% - 8px),center 8px,center calc(100% - 7px);}

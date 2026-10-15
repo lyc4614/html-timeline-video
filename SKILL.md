@@ -2910,8 +2910,9 @@ dy = max(纹样T − 内容B, 内容T − 纹样B)     负值 = y 轴交叠
 ```css
 .card.pc::before{
   background-color:var(--pk);background-image:none;        /* 颜色交给纸的墨色 */
-  -webkit-mask-image:var(--orn-c-tl),…,var(--orn-div),var(--orn-scroll);
-          mask-image:var(--orn-c-tl),…,var(--orn-div),var(--orn-scroll);
+  -webkit-mask-image:var(--orn-div);mask-image:var(--orn-div);
+  -webkit-mask-size:620px 34px;mask-size:620px 34px;
+  -webkit-mask-position:center 11px;mask-position:center 11px;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;}
 ```
 
@@ -2922,6 +2923,26 @@ dy = max(纹样T − 内容B, 内容T − 纹样B)     负值 = y 轴交叠
 > 早期方案给每个色相各生成一套换色 SVG（5 份资源，改一处要改五处）。
 > 换 mask 之后省掉 4 份，**性能实测免费**（`nomask` 与 `base` 同速，见 5. 测速）。
 
+#### 纹样密度：默认只留顶线，别一上来铺满
+
+第一版把能挂的全挂上了：**四角花纹 ×4 + 顶部花饰 + 底部卷草 = 6 层**。
+单张卡看还行，**4 张并排就是 16~24 处装饰** —— 用户的原话是
+「四周花纹太多，显得花哨，简约大气即可」。密度是这么翻上去的，不是某一处难看。
+
+减负时分三类，**别凭手感**：
+
+| 纹样 | 判定 | 处置 |
+|---|---|---|
+| 顶部分隔线 | 有**功能**：把卡的「标题带」与「内容带」分开，读着有结构 | **留** |
+| 四角花纹 | 纯装饰，且四处同时出现最显花 | **默认去** |
+| 底部卷草 | 纯装饰，与顶线重复表达「分隔」 | **默认去** |
+
+所以 `paper-cards.css` 的默认值是**一层顶线**；
+四角花纹做成 `.card.pc.ornate`，**默认关闭、按需局部打开**
+（打开后仍走 mask + `--pk`，五色共用同一份 SVG）。
+
+⚠ 打开 `.ornate` 时必须核对 padding：内容边距 **P ≥ 角花深入量（O+F）+ 6**，
+否则角花会压内容（尺子与判据见「⑩ 卡片 / 边框系统」）。
 ⚠ `.sm` 档**缩尺寸时必须同步缩位置**（内缩量也要减），只改 `mask-size` 会让纹样顶到卡边。
 
 ### 11.3 卡内文字零改动：兜底匹配，不要枚举
@@ -2983,7 +3004,7 @@ dy = max(纹样T − 内容B, 内容T − 纹样B)     负值 = y 轴交叠
 - [ ] 浅底卡内**没有任何一行文字看不见** —— 抽帧覆盖每一张改过的卡（兜底规则生效的证明）
 - [ ] `grep -c 'style\*="color:"' index.html` 为 1（兜底规则在），且 `.card.pc b` 在其**之后**
 - [ ] 图标全部收在 `.card.pc` 作用域内（无裸 `.ico` 覆盖）
-- [ ] 卡角纹样在五张纸上**都看得见**（mask 生效：`getComputedStyle(card,'::before').maskImage ≠ none`）
+- [ ] 纹样密度符合用户要求：默认**只留顶部分隔线**（`.card.pc::before` 只有一层 mask）；若某镜开了 `.ornate`，确认四角不压内容（P ≥ O+F+6）
 
 ### 11.7 静态页也会「静默全空」：`card_lab.html` 躺了很久的语法错误
 
